@@ -20,6 +20,8 @@
   let posS = { x: 0, y: 0, vx: 0, vy: 0 };
   let mergeAmp = 0.55;
   let mergeVel = 0;
+  let deformM = { sx: 1, sy: 1, skew: 0, pullX: 0, pullY: 0 };
+  let deformS = { sx: 1, sy: 1, skew: 0, pullX: 0, pullY: 0 };
   let cssW = 0;
   let cssH = 0;
   let iw = 0;
@@ -128,6 +130,32 @@
     ctx.fillText(ch, cx, cy + fs * 0.03);
   }
 
+  function drawGlyphWarped(ch, cx, cy, boxH, def) {
+    const fs = Math.max(12, boxH * 1.02);
+    fctx.save();
+    fctx.translate(cx, cy);
+    fctx.transform(def.sx, 0, Math.tan(def.skew * 0.55), def.sy, 0, 0);
+    fctx.fillStyle = "#fff";
+    fctx.textAlign = "center";
+    fctx.textBaseline = "middle";
+    fctx.font = FONT.replace("1px", fs + "px");
+    fctx.fillText(ch, 0, fs * 0.03);
+    fctx.restore();
+  }
+
+  function drawSharpGlyphWarped(ch, cx, cy, boxH, def) {
+    const fs = Math.max(12, boxH * 1.02);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.transform(def.sx, 0, Math.tan(def.skew * 0.55), def.sy, 0, 0);
+    ctx.fillStyle = "#000";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = FONT.replace("1px", fs + "px");
+    ctx.fillText(ch, 0, fs * 0.03);
+    ctx.restore();
+  }
+
   function blob(x, y, r, a) {
     if (r < 0.5) return;
     const g = fctx.createRadialGradient(x, y, 0, x, y, r);
@@ -180,66 +208,98 @@
     smooth.y = lerp(smooth.y || ty, ty, 0.14);
 
     const dist = Math.hypot(smooth.x - midX, smooth.y - midY);
-    const reach = Math.min(iw, ih) * 0.55;
-    const outward = mouse.active ? clamp(dist / reach, 0, 1.35) : 0.15;
-    const inward = mouse.active ? clamp(1 - dist / (reach * 0.55), 0, 1) : 0.55;
+    const reach = Math.min(iw, ih) * 0.62;
+    const outward = mouse.active ? clamp(dist / reach, 0, 1.45) : 0.12;
+    const inward = mouse.active ? clamp(1 - dist / (reach * 0.72), 0, 1) : 0.5;
+    // Proximity to either letter (field space) — drives form warp
+    const dM = Math.hypot(smooth.x - b.m.cx, smooth.y - b.m.cy);
+    const dS = Math.hypot(smooth.x - b.s.cx, smooth.y - b.s.cy);
+    const nearR = Math.min(b.m.h, b.s.h) * 1.35;
+    const proxM = mouse.active ? clamp(1 - dM / nearR, 0, 1) : 0;
+    const proxS = mouse.active ? clamp(1 - dS / nearR, 0, 1) : 0;
+    const prox = Math.max(proxM, proxS, inward * 0.85);
 
+    // Stronger pull-together / push-apart
     const together = mouse.active
-      ? lerp(28, -36, clamp(outward, 0, 1))
-      : 10 + Math.sin(time * 0.7) * 4;
+      ? lerp(52, -58, clamp(outward, 0, 1))
+      : 12 + Math.sin(time * 0.7) * 5;
     const attractMerge = mouse.active
-      ? lerp(1.25, 0.15, clamp(outward / 1.1, 0, 1))
-      : 0.55 + 0.2 * Math.sin(time * 0.65);
+      ? lerp(1.85, 0.12, clamp(outward / 1.05, 0, 1)) * (0.55 + prox * 0.7)
+      : 0.55 + 0.22 * Math.sin(time * 0.65);
 
-    const leanM = mouse.active ? ((smooth.x - b.m.cx) / scale) * 0.04 * (0.4 + outward) : 0;
-    const leanS = mouse.active ? ((smooth.x - b.s.cx) / scale) * 0.04 * (0.4 + outward) : 0;
-    const leanMY = mouse.active ? ((smooth.y - b.m.cy) / scale) * 0.05 * (0.5 + outward * 0.5) : 0;
-    const leanSY = mouse.active ? ((smooth.y - b.s.cy) / scale) * 0.05 * (0.5 + outward * 0.5) : 0;
+    const leanAmt = 0.12 + prox * 0.18;
+    const leanM = mouse.active ? ((smooth.x - b.m.cx) / scale) * leanAmt * (0.55 + outward * 0.5 + proxM) : 0;
+    const leanS = mouse.active ? ((smooth.x - b.s.cx) / scale) * leanAmt * (0.55 + outward * 0.5 + proxS) : 0;
+    const leanMY = mouse.active ? ((smooth.y - b.m.cy) / scale) * (0.14 + proxM * 0.12) : 0;
+    const leanSY = mouse.active ? ((smooth.y - b.s.cy) / scale) * (0.14 + proxS * 0.12) : 0;
 
-    // Springs stay in CSS-pixel space for letter transforms
+    // Snappier springs
     springToward(
       posM,
       together + leanM + Math.sin(time * 1.1) * 2.5,
       leanMY + Math.cos(time * 0.9) * 2.2,
-      0.075,
-      0.87
+      0.11,
+      0.82
     );
     springToward(
       posS,
       -together + leanS + Math.sin(time * 1.1 + 1.2) * 2.5,
       leanSY + Math.cos(time * 0.9 + 0.8) * 2.2,
-      0.075,
-      0.87
+      0.11,
+      0.82
     );
 
     const mergeTarget = attractMerge;
-    mergeVel = (mergeVel + (mergeTarget - mergeAmp) * 0.11) * 0.9;
+    mergeVel = (mergeVel + (mergeTarget - mergeAmp) * 0.16) * 0.86;
     mergeAmp += mergeVel;
 
-    letterM.style.transform = `translate(${posM.x.toFixed(2)}px, ${posM.y.toFixed(2)}px)`;
-    letterS.style.transform = `translate(${posS.x.toFixed(2)}px, ${posS.y.toFixed(2)}px)`;
+    // Letter-form distortion toward the cursor (skew / stretch / squash)
+    function aimDeform(def, cx, cy, proxLetter) {
+      const dx = mouse.active ? (smooth.x - cx) / scale : 0;
+      const dy = mouse.active ? (smooth.y - cy) / scale : 0;
+      const pull = proxLetter * proxLetter;
+      const tSx = 1 + pull * clamp(dx / 140, -0.42, 0.42) + inward * 0.08 * (mouse.active ? 1 : 0);
+      const tSy = 1 + pull * clamp(dy / 160, -0.38, 0.38) - prox * 0.12 * pull;
+      const tSkew = pull * clamp(dx / 90, -0.55, 0.55);
+      const tPullX = pull * clamp(dx * 0.22, -36, 36);
+      const tPullY = pull * clamp(dy * 0.2, -30, 30);
+      def.sx = lerp(def.sx, tSx, 0.18);
+      def.sy = lerp(def.sy, clamp(tSy, 0.72, 1.38), 0.18);
+      def.skew = lerp(def.skew, tSkew, 0.18);
+      def.pullX = lerp(def.pullX, tPullX, 0.18);
+      def.pullY = lerp(def.pullY, tPullY, 0.18);
+    }
+    aimDeform(deformM, b.m.cx, b.m.cy, Math.max(proxM, inward * 0.55));
+    aimDeform(deformS, b.s.cx, b.s.cy, Math.max(proxS, inward * 0.55));
+
+    letterM.style.transform =
+      `translate(${(posM.x + deformM.pullX).toFixed(2)}px, ${(posM.y + deformM.pullY).toFixed(2)}px) ` +
+      `skewX(${(deformM.skew * 18).toFixed(2)}deg) scale(${deformM.sx.toFixed(3)}, ${deformM.sy.toFixed(3)})`;
+    letterS.style.transform =
+      `translate(${(posS.x + deformS.pullX).toFixed(2)}px, ${(posS.y + deformS.pullY).toFixed(2)}px) ` +
+      `skewX(${(deformS.skew * 18).toFixed(2)}deg) scale(${deformS.sx.toFixed(3)}, ${deformS.sy.toFixed(3)})`;
 
     // Invalidate box cache when letters move a lot
     if (Math.abs(posM.vx) + Math.abs(posS.vx) > 0.4) boxAge = 99;
 
-    const mCx = b.m.cx + posM.x * scale;
-    const mCy = b.m.cy + posM.y * scale;
-    const sCx = b.s.cx + posS.x * scale;
-    const sCy = b.s.cy + posS.y * scale;
+    const mCx = b.m.cx + (posM.x + deformM.pullX) * scale;
+    const mCy = b.m.cy + (posM.y + deformM.pullY) * scale;
+    const sCx = b.s.cx + (posS.x + deformS.pullX) * scale;
+    const sCy = b.s.cy + (posS.y + deformS.pullY) * scale;
 
     fctx.setTransform(1, 0, 0, 1, 0, 0);
     fctx.fillStyle = "#000";
     fctx.fillRect(0, 0, iw, ih);
 
-    drawGlyph("M", mCx, mCy, b.m.h);
-    drawGlyph("S", sCx, sCy, b.s.h);
+    drawGlyphWarped("M", mCx, mCy, b.m.h, deformM);
+    drawGlyphWarped("S", sCx, sCy, b.s.h, deformS);
 
     const mRight = mCx + b.m.w * 0.3;
     const sLeft = sCx - b.s.w * 0.3;
     const baseY = (mCy + sCy) * 0.5 + Math.min(b.m.h, b.s.h) * 0.16;
     const gap = Math.max(4, sLeft - mRight);
 
-    const plump = (8 + mergeAmp * 32) * scale;
+    const plump = (10 + mergeAmp * 48) * scale * (0.9 + prox * 0.45);
     const strand = clamp(gap / (90 * scale), 0, 1);
     // Fewer lobes when stretched thin — cheaper, still reads as fluid
     const lobes = 7 + Math.round(strand * 4);
@@ -249,11 +309,14 @@
       const wave =
         Math.sin(time * 2.0 + u * Math.PI * 2) * (4 + mergeAmp * 8) * scale * (1 - strand * 0.5) +
         Math.sin(time * 3.1 + u * 5) * 2 * scale * (1 - strand * 0.4);
-      const x = lerp(mRight, sLeft, u);
-      const pullY =
-        mouse.active && outward > 0.35
-          ? (smooth.y - baseY) * u * (1 - u) * 0.55 * outward
-          : 0;
+      const x0 = lerp(mRight, sLeft, u);
+      const pullY = mouse.active
+        ? (smooth.y - baseY) * u * (1 - u) * (0.75 + prox * 0.9) * Math.max(outward, prox * 0.8)
+        : 0;
+      const pullX = mouse.active
+        ? (smooth.x - x0) * u * (1 - u) * (0.35 + prox * 0.55)
+        : 0;
+      const x = x0 + pullX;
       const y = baseY + wave * Math.sin(u * Math.PI) + pullY;
       const r =
         plump *
@@ -266,9 +329,9 @@
     blob(mRight - scale, baseY + Math.sin(time * 2) * 3 * scale, plump * (0.85 - strand * 0.2), 1);
     blob(sLeft + scale, baseY + Math.cos(time * 2.1) * 3 * scale, plump * (0.9 - strand * 0.2), 1);
     blob(
-      lerp(mRight, sLeft, 0.5) + Math.sin(time * 1.6) * (4 - strand * 2) * scale,
-      baseY - 3 * scale + (mouse.active && outward > 0.4 ? (smooth.y - baseY) * 0.12 * outward : 0),
-      plump * (1.0 - strand * 0.35) * (0.9 + inward * 0.2),
+      lerp(mRight, sLeft, 0.5) + Math.sin(time * 1.6) * (4 - strand * 2) * scale + (mouse.active ? (smooth.x - midX) * 0.2 * prox : 0),
+      baseY - 3 * scale + (mouse.active ? (smooth.y - baseY) * (0.18 + prox * 0.35) : 0),
+      plump * (1.0 - strand * 0.35) * (0.95 + inward * 0.35 + prox * 0.4),
       1
     );
 
@@ -303,8 +366,8 @@
     const mCyCss = b.m.cy / scale + posM.y;
     const sCxCss = b.s.cx / scale + posS.x;
     const sCyCss = b.s.cy / scale + posS.y;
-    drawSharpGlyph("M", mCxCss, mCyCss, b.m.h / scale);
-    drawSharpGlyph("S", sCxCss, sCyCss, b.s.h / scale);
+    drawSharpGlyphWarped("M", mCxCss + deformM.pullX, mCyCss + deformM.pullY, b.m.h / scale, deformM);
+    drawSharpGlyphWarped("S", sCxCss + deformS.pullX, sCyCss + deformS.pullY, b.s.h / scale, deformS);
   }
 
   window.addEventListener(
