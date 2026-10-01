@@ -1,8 +1,7 @@
 (() => {
   /**
-   * Solid Playfair M/S: clear letter forms + fluid merge.
-   * Full-viewport canvas — no letter-box edge; mouse is site-wide.
-   * Outward → stretch apart; inward → stronger merge.
+   * Solid Playfair M/S: clear forms + fluid merge, full-page mouse.
+   * Perf: low-res field + soft threshold + upscale (target ~60fps).
    */
   const stage = document.getElementById("ms-stage");
   const canvas = document.getElementById("ms-canvas");
@@ -11,7 +10,7 @@
   const home = document.getElementById("view-home");
   if (!stage || !canvas || !letterM || !letterS || !home) return;
 
-  const ctx = canvas.getContext("2d", { alpha: true });
+  const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
   const field = document.createElement("canvas");
   const fctx = field.getContext("2d", { willReadFrequently: true });
 
@@ -21,11 +20,18 @@
   let posS = { x: 0, y: 0, vx: 0, vy: 0 };
   let mergeAmp = 0.55;
   let mergeVel = 0;
-  let w = 0;
-  let h = 0;
+  let cssW = 0;
+  let cssH = 0;
+  let iw = 0;
+  let ih = 0;
+  let scale = 1;
   let dpr = 1;
-  const SS = 2; // supersample to reduce pixelation
   let t0 = performance.now();
+  let lastBox = null;
+  let boxAge = 0;
+
+  // Cap internal sim resolution — biggest FPS win vs full-viewport × SS
+  const MAX_EDGE = 900;
 
   const FONT =
     '700 1px "Playfair Display", "Times New Roman", Times, Georgia, serif';
@@ -42,26 +48,33 @@
   }
 
   function layout() {
-    // Full viewport — morph paints anywhere, not clipped to the letter box
-    const sr = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const nw = Math.max(2, Math.round(sr.width));
-    const nh = Math.max(2, Math.round(sr.height));
-    if (nw !== w || nh !== h) {
-      w = nw;
-      h = nh;
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
-      canvas.style.width = w + "px";
-      canvas.style.height = h + "px";
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      field.width = Math.round(w * SS);
-      field.height = Math.round(h * SS);
+    dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+    const nw = Math.max(2, window.innerWidth | 0);
+    const nh = Math.max(2, window.innerHeight | 0);
+    if (nw === cssW && nh === cssH) {
+      return;
     }
-    return sr;
+    cssW = nw;
+    cssH = nh;
+    scale = Math.min(1, MAX_EDGE / Math.max(nw, nh));
+    iw = Math.max(2, Math.round(nw * scale));
+    ih = Math.max(2, Math.round(nh * scale));
+
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    field.width = iw;
+    field.height = ih;
   }
 
-  function boxes(sr) {
+  function readBoxes() {
+    // Cache letter metrics most frames — layout rarely changes mid-hover
+    boxAge++;
+    if (lastBox && boxAge < 8) return lastBox;
+
     const tm = letterM.style.transform;
     const ts = letterS.style.transform;
     letterM.style.transform = "none";
@@ -70,20 +83,23 @@
     const s = letterS.getBoundingClientRect();
     letterM.style.transform = tm;
     letterS.style.transform = ts;
-    return {
+
+    lastBox = {
       m: {
-        w: m.width,
-        h: m.height,
-        cx: m.left - sr.left + m.width * 0.5,
-        cy: m.top - sr.top + m.height * 0.5,
+        w: m.width * scale,
+        h: m.height * scale,
+        cx: (m.left + m.width * 0.5) * scale,
+        cy: (m.top + m.height * 0.5) * scale,
       },
       s: {
-        w: s.width,
-        h: s.height,
-        cx: s.left - sr.left + s.width * 0.5,
-        cy: s.top - sr.top + s.height * 0.5,
+        w: s.width * scale,
+        h: s.height * scale,
+        cx: (s.left + s.width * 0.5) * scale,
+        cy: (s.top + s.height * 0.5) * scale,
       },
     };
+    boxAge = 0;
+    return lastBox;
   }
 
   function springToward(state, tx, ty, k, damp) {
@@ -93,63 +109,83 @@
     state.y += state.vy;
   }
 
-  function drawGlyph(c, ch, cx, cy, boxH, ss) {
-    const fs = Math.max(12, boxH * 1.02) * ss;
-    c.fillStyle = "#fff";
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    c.font = FONT.replace("1px", fs + "px");
-    c.fillText(ch, cx * ss, cy * ss + fs * 0.03);
+  function drawGlyph(ch, cx, cy, boxH) {
+    const fs = Math.max(12, boxH * 1.02);
+    fctx.fillStyle = "#fff";
+    fctx.textAlign = "center";
+    fctx.textBaseline = "middle";
+    fctx.font = FONT.replace("1px", fs + "px");
+    fctx.fillText(ch, cx, cy + fs * 0.03);
   }
 
-  function blob(c, x, y, r, a, ss) {
-    const g = c.createRadialGradient(x * ss, y * ss, 0, x * ss, y * ss, r * ss);
+  function blob(x, y, r, a) {
+    if (r < 0.5) return;
+    const g = fctx.createRadialGradient(x, y, 0, x, y, r);
     g.addColorStop(0, `rgba(255,255,255,${a})`);
     g.addColorStop(0.55, `rgba(255,255,255,${a * 0.5})`);
     g.addColorStop(1, "rgba(255,255,255,0)");
-    c.fillStyle = g;
-    c.beginPath();
-    c.arc(x * ss, y * ss, r * ss, 0, Math.PI * 2);
-    c.fill();
+    fctx.fillStyle = g;
+    fctx.beginPath();
+    fctx.arc(x, y, r, 0, Math.PI * 2);
+    fctx.fill();
+  }
+
+  function softThreshold() {
+    const img = fctx.getImageData(0, 0, iw, ih);
+    const d = img.data;
+    const lo = 110;
+    const hi = 175;
+    const inv = 1 / (hi - lo);
+    for (let i = 0; i < d.length; i += 4) {
+      const v = d[i];
+      if (v <= lo) {
+        d[i + 3] = 0;
+      } else {
+        const t = v >= hi ? 1 : (v - lo) * inv;
+        d[i] = 0;
+        d[i + 1] = 0;
+        d[i + 2] = 0;
+        d[i + 3] = (t * 255) | 0;
+      }
+    }
+    fctx.putImageData(img, 0, 0);
   }
 
   function frame(now) {
     requestAnimationFrame(frame);
     if (!home.classList.contains("is-active") || home.hidden) return;
 
-    const sr = layout();
-    if (w < 8) return;
+    layout();
+    if (iw < 8) return;
 
     const time = (now - t0) / 1000;
-    const b = boxes(sr);
+    const b = readBoxes();
     const midX = (b.m.cx + b.s.cx) * 0.5;
     const midY = (b.m.cy + b.s.cy) * 0.5;
 
-    const tx = mouse.active ? mouse.x - sr.left : midX + Math.sin(time * 0.5) * 18;
-    const ty = mouse.active ? mouse.y - sr.top : midY + Math.cos(time * 0.4) * 10;
+    const tx = mouse.active ? mouse.x * scale : midX + Math.sin(time * 0.5) * 18 * scale;
+    const ty = mouse.active ? mouse.y * scale : midY + Math.cos(time * 0.4) * 10 * scale;
     smooth.x = lerp(smooth.x || tx, tx, 0.14);
     smooth.y = lerp(smooth.y || ty, ty, 0.14);
 
-    // Outwardness: how far mouse is from the MS mid — drives stretch-apart
     const dist = Math.hypot(smooth.x - midX, smooth.y - midY);
-    const reach = Math.min(w, h) * 0.55;
+    const reach = Math.min(iw, ih) * 0.55;
     const outward = mouse.active ? clamp(dist / reach, 0, 1.35) : 0.15;
     const inward = mouse.active ? clamp(1 - dist / (reach * 0.55), 0, 1) : 0.55;
 
-    // Idle: gentle breathe-together; mouse in: merge; mouse out: stretch apart
     const together = mouse.active
-      ? lerp(28, -36, clamp(outward, 0, 1)) // positive = pull in, negative = push apart
+      ? lerp(28, -36, clamp(outward, 0, 1))
       : 10 + Math.sin(time * 0.7) * 4;
     const attractMerge = mouse.active
       ? lerp(1.25, 0.15, clamp(outward / 1.1, 0, 1))
       : 0.55 + 0.2 * Math.sin(time * 0.65);
 
-    // Lean toward mouse a bit while stretching
-    const leanM = mouse.active ? (smooth.x - b.m.cx) * 0.04 * (0.4 + outward) : 0;
-    const leanS = mouse.active ? (smooth.x - b.s.cx) * 0.04 * (0.4 + outward) : 0;
-    const leanMY = mouse.active ? (smooth.y - b.m.cy) * 0.05 * (0.5 + outward * 0.5) : 0;
-    const leanSY = mouse.active ? (smooth.y - b.s.cy) * 0.05 * (0.5 + outward * 0.5) : 0;
+    const leanM = mouse.active ? ((smooth.x - b.m.cx) / scale) * 0.04 * (0.4 + outward) : 0;
+    const leanS = mouse.active ? ((smooth.x - b.s.cx) / scale) * 0.04 * (0.4 + outward) : 0;
+    const leanMY = mouse.active ? ((smooth.y - b.m.cy) / scale) * 0.05 * (0.5 + outward * 0.5) : 0;
+    const leanSY = mouse.active ? ((smooth.y - b.s.cy) / scale) * 0.05 * (0.5 + outward * 0.5) : 0;
 
+    // Springs stay in CSS-pixel space for letter transforms
     springToward(
       posM,
       together + leanM + Math.sin(time * 1.1) * 2.5,
@@ -172,38 +208,37 @@
     letterM.style.transform = `translate(${posM.x.toFixed(2)}px, ${posM.y.toFixed(2)}px)`;
     letterS.style.transform = `translate(${posS.x.toFixed(2)}px, ${posS.y.toFixed(2)}px)`;
 
-    const mCx = b.m.cx + posM.x;
-    const mCy = b.m.cy + posM.y;
-    const sCx = b.s.cx + posS.x;
-    const sCy = b.s.cy + posS.y;
+    // Invalidate box cache when letters move a lot
+    if (Math.abs(posM.vx) + Math.abs(posS.vx) > 0.4) boxAge = 99;
 
-    const ss = SS;
+    const mCx = b.m.cx + posM.x * scale;
+    const mCy = b.m.cy + posM.y * scale;
+    const sCx = b.s.cx + posS.x * scale;
+    const sCy = b.s.cy + posS.y * scale;
+
     fctx.setTransform(1, 0, 0, 1, 0, 0);
-    fctx.clearRect(0, 0, field.width, field.height);
     fctx.fillStyle = "#000";
-    fctx.fillRect(0, 0, field.width, field.height);
+    fctx.fillRect(0, 0, iw, ih);
 
-    // Solid letter forms — clearly readable
-    drawGlyph(fctx, "M", mCx, mCy, b.m.h, ss);
-    drawGlyph(fctx, "S", sCx, sCy, b.s.h, ss);
+    drawGlyph("M", mCx, mCy, b.m.h);
+    drawGlyph("S", sCx, sCy, b.s.h);
 
     const mRight = mCx + b.m.w * 0.3;
     const sLeft = sCx - b.s.w * 0.3;
     const baseY = (mCy + sCy) * 0.5 + Math.min(b.m.h, b.s.h) * 0.16;
     const gap = Math.max(4, sLeft - mRight);
 
-    // Fluid bridge: fat when together, long thin strand when stretched apart
-    const plump = 8 + mergeAmp * 32;
-    const strand = clamp(gap / 90, 0, 1);
-    const lobes = 10 + Math.round(strand * 8);
+    const plump = (8 + mergeAmp * 32) * scale;
+    const strand = clamp(gap / (90 * scale), 0, 1);
+    // Fewer lobes when stretched thin — cheaper, still reads as fluid
+    const lobes = 7 + Math.round(strand * 4);
 
     for (let i = 0; i < lobes; i++) {
-      const u = i / (lobes - 1);
+      const u = i / (lobes - 1 || 1);
       const wave =
-        Math.sin(time * 2.0 + u * Math.PI * 2) * (4 + mergeAmp * 8) * (1 - strand * 0.5) +
-        Math.sin(time * 3.1 + u * 5) * 2 * (1 - strand * 0.4);
+        Math.sin(time * 2.0 + u * Math.PI * 2) * (4 + mergeAmp * 8) * scale * (1 - strand * 0.5) +
+        Math.sin(time * 3.1 + u * 5) * 2 * scale * (1 - strand * 0.4);
       const x = lerp(mRight, sLeft, u);
-      // When stretched, fluid is pulled toward mouse if outward
       const pullY =
         mouse.active && outward > 0.35
           ? (smooth.y - baseY) * u * (1 - u) * 0.55 * outward
@@ -214,65 +249,43 @@
         (0.35 + Math.sin(u * Math.PI) * 0.9) *
         (1 - strand * 0.55) *
         (0.85 + 0.15 * Math.sin(time * 2.2 + i));
-      blob(fctx, x, y, Math.max(4, r), 0.95, ss);
+      blob(x, y, Math.max(3 * scale, r), 0.95);
     }
 
-    // Serif anchors — stay connected to letter feet, stretch with gap
-    blob(fctx, mRight - 1, baseY + Math.sin(time * 2) * 3, plump * (0.85 - strand * 0.2), 1, ss);
-    blob(fctx, sLeft + 1, baseY + Math.cos(time * 2.1) * 3, plump * (0.9 - strand * 0.2), 1, ss);
+    blob(mRight - scale, baseY + Math.sin(time * 2) * 3 * scale, plump * (0.85 - strand * 0.2), 1);
+    blob(sLeft + scale, baseY + Math.cos(time * 2.1) * 3 * scale, plump * (0.9 - strand * 0.2), 1);
     blob(
-      fctx,
-      lerp(mRight, sLeft, 0.5) + Math.sin(time * 1.6) * (4 - strand * 2),
-      baseY - 3 + (mouse.active && outward > 0.4 ? (smooth.y - baseY) * 0.12 * outward : 0),
+      lerp(mRight, sLeft, 0.5) + Math.sin(time * 1.6) * (4 - strand * 2) * scale,
+      baseY - 3 * scale + (mouse.active && outward > 0.4 ? (smooth.y - baseY) * 0.12 * outward : 0),
       plump * (1.0 - strand * 0.35) * (0.9 + inward * 0.2),
-      1,
-      ss
+      1
     );
 
-    // Mid whisper only when close
     if (mergeAmp > 0.7 && strand < 0.45) {
       const yMid = (mCy + sCy) * 0.5;
-      for (let i = 0; i < 5; i++) {
-        const u = i / 4;
+      for (let i = 0; i < 4; i++) {
+        const u = i / 3;
         blob(
-          fctx,
           lerp(mRight, sLeft, u),
-          yMid + Math.sin(time * 2 + u * 5) * 6 * mergeAmp,
+          yMid + Math.sin(time * 2 + u * 5) * 6 * mergeAmp * scale,
           plump * 0.25 * mergeAmp,
-          0.7,
-          ss
+          0.7
         );
       }
     }
 
-    // Soft hi-res blur
-    fctx.filter = `blur(${13 * ss}px)`;
+    // Blur at low-res (cheap) ≈ stronger blur when upscaled
+    const blurPx = Math.max(4, 12 * scale);
+    fctx.filter = `blur(${blurPx}px)`;
     fctx.drawImage(field, 0, 0);
     fctx.filter = "none";
 
-    // Soft threshold (ramp) → less pixelated than hard cut
-    const img = fctx.getImageData(0, 0, field.width, field.height);
-    const d = img.data;
-    const lo = 110;
-    const hi = 175;
-    for (let i = 0; i < d.length; i += 4) {
-      const v = d[i];
-      if (v <= lo) {
-        d[i + 3] = 0;
-      } else {
-        const t = v >= hi ? 1 : (v - lo) / (hi - lo);
-        d[i] = 0;
-        d[i + 1] = 0;
-        d[i + 2] = 0;
-        d[i + 3] = Math.round(255 * t);
-      }
-    }
-    fctx.putImageData(img, 0, 0);
+    softThreshold();
 
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, cssW, cssH);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(field, 0, 0, w, h);
+    ctx.drawImage(field, 0, 0, cssW, cssH);
   }
 
   window.addEventListener(
@@ -304,6 +317,14 @@
     "blur",
     () => {
       mouse.active = false;
+    },
+    { passive: true }
+  );
+  window.addEventListener(
+    "resize",
+    () => {
+      cssW = 0; // force layout refresh
+      lastBox = null;
     },
     { passive: true }
   );
