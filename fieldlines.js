@@ -1,8 +1,9 @@
 (() => {
   /**
-   * Ferrofluid MS — Playfair Display 700 molds as glossy black fluid on
-   * brushed metal. Letters magnetically attract, stretch, and bridge.
-   * Mouse modulates pull between M and S. No spikes.
+   * Ferrofluid MS — continuous glossy jet-black liquid poured into
+   * Playfair Display 700 letter molds on brushed metal.
+   * Metaball / soft-field fill (no beads, no straight webs, no spray).
+   * Magnetic M↔S attraction with soft bulbous bridges; mouse modulates pull.
    *
    * Never block seeding on document.fonts.load — under file:// that promise
    * often never resolves.
@@ -15,68 +16,33 @@
   if (!stage || !canvas || !letterM || !letterS || !home) return;
 
   const ctx = canvas.getContext("2d", { alpha: false });
+
+  // Offscreen: letter masks + fluid field
   const mask = document.createElement("canvas");
   const mctx = mask.getContext("2d", { willReadFrequently: true });
+  const fluid = document.createElement("canvas");
+  const fctx = fluid.getContext("2d", { willReadFrequently: true });
 
   const FONT =
     '700 1px "Playfair Display", "Times New Roman", Times, Georgia, serif';
 
   let particles = [];
+  let bridges = []; // soft bridge metaballs between facing edges
   let mouse = { x: 0, y: 0, active: false };
   let seeded = false;
   let lastW = 0;
   let lastH = 0;
-  let links = [];
   let metalPattern = null;
   let metalKey = "";
   let t0 = performance.now();
+  let pullScale = 1;
+  let pullBiasY = 0;
 
-  const CELL = 32;
-  let grid = new Map();
-
-  function key(cx, cy) {
-    return cx + "," + cy;
-  }
-
-  function rebuildGrid() {
-    grid.clear();
-    for (let i = 0; i < particles.length; i++) {
-      const p = particles[i];
-      const cx = (p.x / CELL) | 0;
-      const cy = (p.y / CELL) | 0;
-      const k = key(cx, cy);
-      let bucket = grid.get(k);
-      if (!bucket) {
-        bucket = [];
-        grid.set(k, bucket);
-      }
-      bucket.push(i);
-    }
-  }
-
-  function neighbors(i, radius) {
-    const p = particles[i];
-    const cx = (p.x / CELL) | 0;
-    const cy = (p.y / CELL) | 0;
-    const r2 = radius * radius;
-    const out = [];
-    for (let oy = -1; oy <= 1; oy++) {
-      for (let ox = -1; ox <= 1; ox++) {
-        const bucket = grid.get(key(cx + ox, cy + oy));
-        if (!bucket) continue;
-        for (let n = 0; n < bucket.length; n++) {
-          const j = bucket[n];
-          if (j === i) continue;
-          const q = particles[j];
-          const dx = q.x - p.x;
-          const dy = q.y - p.y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < r2 && d2 > 0.0001) out.push({ j, dx, dy, d2 });
-        }
-      }
-    }
-    return out;
-  }
+  // Coarse field grid for metaball threshold paint
+  const CELL = 3;
+  let fieldW = 0;
+  let fieldH = 0;
+  let field = null;
 
   function layoutSize() {
     const sr = stage.getBoundingClientRect();
@@ -103,17 +69,14 @@
     tile.width = tw;
     tile.height = th;
     const tctx = tile.getContext("2d");
-    // Charcoal base
     tctx.fillStyle = "#2a2c2e";
     tctx.fillRect(0, 0, tw, th);
-    // Soft vertical shading (tray depth)
     const vg = tctx.createLinearGradient(0, 0, 0, th);
     vg.addColorStop(0, "rgba(255,255,255,0.06)");
     vg.addColorStop(0.45, "rgba(0,0,0,0)");
     vg.addColorStop(1, "rgba(0,0,0,0.18)");
     tctx.fillStyle = vg;
     tctx.fillRect(0, 0, tw, th);
-    // Horizontal brush scratches
     tctx.lineCap = "butt";
     for (let i = 0; i < 140; i++) {
       const y = (Math.random() * th) | 0;
@@ -123,14 +86,13 @@
       const lite = Math.random() > 0.55;
       tctx.strokeStyle = lite
         ? "rgba(210,215,220," + a + ")"
-        : "rgba(0,0,0," + (a * 1.4) + ")";
+        : "rgba(0,0,0," + a * 1.4 + ")";
       tctx.lineWidth = 0.6 + Math.random() * 1.4;
       tctx.beginPath();
       tctx.moveTo(x0, y + (Math.random() - 0.5) * 1.5);
       tctx.lineTo(x0 + len, y + (Math.random() - 0.5) * 1.5);
       tctx.stroke();
     }
-    // Subtle noise
     const img = tctx.getImageData(0, 0, tw, th);
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -144,7 +106,7 @@
   }
 
   function sampleLetter(ch, rect, sr, group) {
-    const pad = 6;
+    const pad = 4;
     const bw = Math.max(2, Math.ceil(rect.width) + pad * 2);
     const bh = Math.max(2, Math.ceil(rect.height) + pad * 2);
     mask.width = bw;
@@ -158,12 +120,14 @@
     mctx.fillText(ch, bw / 2, bh / 2 + fs * 0.03);
 
     const img = mctx.getImageData(0, 0, bw, bh).data;
-    const step = Math.max(3, Math.round(Math.min(bw, bh) / 52));
+    // Dense enough that metaball radii fully fuse inside the glyph
+    const step = Math.max(4, Math.round(Math.min(bw, bh) / 38));
     const ox = rect.left - sr.left - pad;
     const oy = rect.top - sr.top - pad;
     const out = [];
     const cx = ox + bw / 2;
     const cy = oy + bh / 2;
+    const influence = step * 1.65;
 
     for (let y = 0; y < bh; y += step) {
       for (let x = 0; x < bw; x += step) {
@@ -186,7 +150,6 @@
           if (img[(py * bw + px) * 4 + 3] < 128) edge += 1;
         }
         const contour = edge / 4;
-        // Distance from glyph center for soft shade
         const gx = ox + x;
         const gy = oy + y;
         const ndx = (gx - cx) / Math.max(1, bw * 0.5);
@@ -202,44 +165,55 @@
           group,
           contour,
           depth,
-          r: step * 0.78,
+          r: influence,
         });
       }
     }
     return out;
   }
 
-  function buildLinks() {
-    links = [];
-    const mOnly = [];
-    const sOnly = [];
-    for (let i = 0; i < particles.length; i++) {
-      if (particles[i].group === 0) mOnly.push(i);
-      else sOnly.push(i);
-    }
-    if (!mOnly.length || !sOnly.length) return;
-    // Facing edges: right side of M, left side of S
-    mOnly.sort((a, b) => particles[b].rx - particles[a].rx);
-    sOnly.sort((a, b) => particles[a].rx - particles[b].rx);
-    const linkCount = Math.min(56, mOnly.length, sOnly.length);
-    const mFace = mOnly.slice(0, Math.min(140, mOnly.length));
-    const sFace = sOnly.slice(0, Math.min(140, sOnly.length));
-    for (let n = 0; n < linkCount; n++) {
-      const mi = mFace[((n / linkCount) * (mFace.length - 1)) | 0];
+  function seedBridges(mParts, sParts) {
+    bridges = [];
+    if (!mParts.length || !sParts.length) return;
+    // Facing samples: right of M, left of S
+    const mFace = mParts
+      .slice()
+      .sort((a, b) => b.rx - a.rx)
+      .slice(0, Math.min(48, mParts.length));
+    const sFace = sParts
+      .slice()
+      .sort((a, b) => a.rx - b.rx)
+      .slice(0, Math.min(48, sParts.length));
+    const count = Math.min(18, mFace.length, sFace.length);
+    for (let n = 0; n < count; n++) {
+      const t = count === 1 ? 0.5 : n / (count - 1);
+      const mi = mFace[((t * (mFace.length - 1)) | 0)];
+      // match by Y
       let best = sFace[0];
       let bestD = Infinity;
-      const py = particles[mi].ry;
       for (let k = 0; k < sFace.length; k++) {
-        const sj = sFace[k];
-        const dy = particles[sj].ry - py;
-        const dx = particles[sj].rx - particles[mi].rx;
-        const d = dx * dx + dy * dy * 2.4;
+        const dy = sFace[k].ry - mi.ry;
+        const d = dy * dy;
         if (d < bestD) {
           bestD = d;
-          best = sj;
+          best = sFace[k];
         }
       }
-      links.push([mi, best]);
+      const midX = (mi.rx + best.rx) * 0.5;
+      const midY = (mi.ry + best.ry) * 0.5;
+      bridges.push({
+        x: midX,
+        y: midY,
+        rx: midX,
+        ry: midY,
+        vx: 0,
+        vy: 0,
+        r0: 10,
+        r: 10,
+        ma: mi,
+        sb: best,
+        t,
+      });
     }
   }
 
@@ -260,8 +234,13 @@
       return false;
     }
 
-    buildLinks();
+    seedBridges(mParts, sParts);
     buildMetal(w, h);
+
+    fieldW = Math.ceil(w / CELL) + 1;
+    fieldH = Math.ceil(h / CELL) + 1;
+    field = new Float32Array(fieldW * fieldH);
+
     lastW = w;
     lastH = h;
     seeded = true;
@@ -305,98 +284,71 @@
     const now = performance.now();
     const wobble = Math.sin((now - t0) * 0.0011) * 0.35;
 
-    // Mouse modulates magnetic pull between M and S (not spike fields)
     const c = centroids();
     const midX = (c.m.x + c.s.x) * 0.5;
     const midY = (c.m.y + c.s.y) * 0.5;
-    let pullScale = 1 + wobble * 0.15;
-    let pullBiasY = 0;
+    pullScale = 1 + wobble * 0.12;
+    pullBiasY = 0;
     if (mouse.active) {
       const dx = mx - midX;
       const dy = my - midY;
       const reach = Math.max(90, Math.min(w, h) * 0.55);
       const dist = Math.sqrt(dx * dx + dy * dy);
       const prox = Math.max(0, 1 - dist / reach);
-      // Closer to gap → stronger mutual attraction; offset shifts stretch direction
-      pullScale = 0.55 + prox * 1.55 + Math.max(0, -dx / reach) * 0.35;
-      pullBiasY = (dy / reach) * 0.9;
+      pullScale = 0.5 + prox * 1.65 + Math.max(0, -dx / reach) * 0.3;
+      pullBiasY = (dy / reach) * 0.95;
     }
-
-    rebuildGrid();
 
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i];
       let fx = 0;
       let fy = 0;
 
-      // Shape memory — soft return to Playfair mold
-      const memory = 0.038 + (1 - p.contour) * 0.08;
+      // Soft shape memory — hold Playfair mold (stronger in letter core)
+      const memory = 0.055 + (1 - p.contour) * 0.09;
       fx += (p.rx - p.x) * memory;
       fy += (p.ry - p.y) * memory;
 
-      // Intra-letter cohesion (viscous body)
-      const near = neighbors(i, 28);
-      for (let n = 0; n < near.length; n++) {
-        const { j, dx, dy, d2 } = near[n];
-        const q = particles[j];
-        if (p.group !== q.group) continue;
-        const d = Math.sqrt(d2);
-        const rest = (p.r + q.r) * 0.92;
-        const diff = d - rest;
-        const str = 0.07;
-        fx += (dx / d) * diff * str;
-        fy += (dy / d) * diff * str;
-        fx += (q.vx - p.vx) * 0.018;
-        fy += (q.vy - p.vy) * 0.018;
-      }
-
-      // Mutual magnetic attraction toward the other letter's centroid
+      // Mutual magnetic attraction — facing edges stretch toward each other
       const target = p.group === 0 ? c.s : c.m;
       const tdx = target.x - p.x;
-      const tdy = target.y - p.y + pullBiasY * 40;
+      const tdy = target.y - p.y + pullBiasY * 36;
       const td = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
-      // Stronger on facing contour particles
       const faceBoost =
         p.group === 0
-          ? Math.max(0, (p.rx - c.m.x) / Math.max(1, w * 0.15))
-          : Math.max(0, (c.s.x - p.rx) / Math.max(1, w * 0.15));
-      const mag = (0.12 + faceBoost * 0.55 + p.contour * 0.2) * pullScale;
+          ? Math.max(0, (p.rx - c.m.x) / Math.max(1, w * 0.14))
+          : Math.max(0, (c.s.x - p.rx) / Math.max(1, w * 0.14));
+      // Contour facing edges pull more → organic bulge / stretch
+      const mag =
+        (0.06 + faceBoost * 0.62 + p.contour * 0.18) * pullScale;
       fx += (tdx / td) * mag;
-      fy += (tdy / td) * mag * 0.85;
+      fy += (tdy / td) * mag * 0.8;
 
-      p.vx = (p.vx + fx) * 0.86;
-      p.vy = (p.vy + fy) * 0.86;
-    }
-
-    // Viscous bridges between facing edges — stretch with pullScale
-    const restBase = 22 - Math.min(12, (pullScale - 0.55) * 10);
-    for (let n = 0; n < links.length; n++) {
-      const ia = links[n][0];
-      const ib = links[n][1];
-      const a = particles[ia];
-      const b = particles[ib];
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const d = Math.sqrt(dx * dx + dy * dy) || 1;
-      const rest = restBase + Math.abs(pullBiasY) * 8;
-      const pull = (d - rest) * (0.028 + pullScale * 0.012);
-      const fx = (dx / d) * pull;
-      const fy = (dy / d) * pull;
-      a.vx += fx;
-      a.vy += fy;
-      b.vx -= fx;
-      b.vy -= fy;
-      // Mild shared drift along mouse bias
-      if (mouse.active) {
-        a.vy += pullBiasY * 0.25;
-        b.vy += pullBiasY * 0.25;
-      }
-    }
-
-    for (let i = 0; i < particles.length; i++) {
-      const p = particles[i];
+      p.vx = (p.vx + fx) * 0.84;
+      p.vy = (p.vy + fy) * 0.84;
       p.x += p.vx;
       p.y += p.vy;
+    }
+
+    // Soft viscous bridges: plump when pull is strong, recede when weak
+    const bridgeStrength = Math.max(0, (pullScale - 0.55) / 1.6);
+    for (let n = 0; n < bridges.length; n++) {
+      const b = bridges[n];
+      const a = b.ma;
+      const s = b.sb;
+      const midX = (a.x + s.x) * 0.5;
+      const midY = (a.y + s.y) * 0.5 + pullBiasY * 10;
+      const gap = Math.hypot(s.x - a.x, s.y - a.y);
+      // Target radius: bulbous when letters close / pull strong
+      const plump = 8 + bridgeStrength * 22 + Math.max(0, 48 - gap) * 0.35;
+      b.r0 = plump;
+      b.r += (plump - b.r) * 0.12;
+      b.vx = (b.vx + (midX - b.x) * 0.12) * 0.82;
+      b.vy = (b.vy + (midY - b.y) * 0.12) * 0.82;
+      b.x += b.vx;
+      b.y += b.vy;
+      // Only show bridge when attraction is meaningful
+      b.visible = bridgeStrength > 0.08 && gap < 120 + bridgeStrength * 80;
     }
   }
 
@@ -404,7 +356,6 @@
     buildMetal(w, h);
     ctx.fillStyle = metalPattern || "#2a2c2e";
     ctx.fillRect(0, 0, w, h);
-    // Soft vignette / tray rim
     const g = ctx.createRadialGradient(
       w * 0.5,
       h * 0.45,
@@ -420,7 +371,7 @@
   }
 
   function paintGrooveLips(sr) {
-    // Slightly lighter raised lips around Playfair molds (metal rim)
+    // Subtle raised metal rim of the Playfair molds (under the poured fluid)
     const mRect = letterM.getBoundingClientRect();
     const sRect = letterS.getBoundingClientRect();
     ctx.save();
@@ -432,12 +383,12 @@
       const y = rect.top - sr.top + rect.height / 2 + fs * 0.03;
       ctx.font = FONT.replace("1px", fs + "px");
       ctx.lineJoin = "round";
-      ctx.lineWidth = Math.max(2.5, fs * 0.018);
-      ctx.strokeStyle = "rgba(170,175,180,0.28)";
+      ctx.lineWidth = Math.max(3, fs * 0.022);
+      ctx.strokeStyle = "rgba(160,165,170,0.22)";
       ctx.strokeText(ch, x, y);
-      ctx.lineWidth = Math.max(1.2, fs * 0.008);
-      ctx.strokeStyle = "rgba(0,0,0,0.35)";
-      ctx.strokeText(ch, x + 0.6, y + 0.8);
+      ctx.lineWidth = Math.max(1.4, fs * 0.01);
+      ctx.strokeStyle = "rgba(0,0,0,0.4)";
+      ctx.strokeText(ch, x + 0.7, y + 0.9);
     };
     drawLip("M", mRect);
     drawLip("S", sRect);
@@ -463,27 +414,165 @@
     draw("S", sRect);
   }
 
-  function paintFluidBlob(p) {
-    // Glossy jet-black ferrofluid droplet with top-light specular
-    const rad = p.r * (1.08 + p.contour * 0.22);
-    const gx = p.x - rad * 0.28;
-    const gy = p.y - rad * 0.38;
-    const grad = ctx.createRadialGradient(gx, gy, rad * 0.05, p.x, p.y, rad);
-    const shade = 8 + Math.floor((1 - p.depth) * 10);
-    grad.addColorStop(0, "rgb(" + (shade + 22) + "," + (shade + 22) + "," + (shade + 24) + ")");
-    grad.addColorStop(0.45, "rgb(" + shade + "," + shade + "," + (shade + 2) + ")");
-    grad.addColorStop(1, "rgb(2,2,3)");
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
-    ctx.fill();
-    // Wet specular highlight
-    if (p.contour < 0.75) {
-      ctx.beginPath();
-      ctx.arc(gx, gy, rad * 0.22, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(210,215,220,0.14)";
-      ctx.fill();
+  function groupOffset(group) {
+    let dx = 0,
+      dy = 0,
+      n = 0;
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      if (p.group !== group) continue;
+      dx += p.x - p.rx;
+      dy += p.y - p.ry;
+      n++;
     }
+    if (!n) return { x: 0, y: 0 };
+    return { x: dx / n, y: dy / n };
+  }
+
+  /**
+   * Continuous ferrofluid fill:
+   * 1) Solid Playfair glyph molds (deformed by magnetic pull)
+   * 2) Soft bulbous bridge blobs between facing edges
+   * 3) Blur → alpha threshold → glossy jet-black shade
+   * Result: poured liquid letters + organic bridges — no beads/webs/spray.
+   */
+  function paintMetaballs(w, h, sr) {
+    if (fluid.width !== w || fluid.height !== h) {
+      fluid.width = w;
+      fluid.height = h;
+    }
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.clearRect(0, 0, w, h);
+    fctx.fillStyle = "#000";
+    fctx.textAlign = "center";
+    fctx.textBaseline = "middle";
+
+    const mRect = letterM.getBoundingClientRect();
+    const sRect = letterS.getBoundingClientRect();
+    const offM = groupOffset(0);
+    const offS = groupOffset(1);
+
+    // Soft blur so letter fills + bridge lobes fuse into one liquid body
+    if (typeof fctx.filter === "string") {
+      fctx.filter = "blur(5.5px)";
+    }
+
+    const drawMold = (ch, rect, off, skewX) => {
+      const fs = Math.max(12, rect.height * 1.02);
+      const x = rect.left - sr.left + rect.width / 2 + off.x;
+      const y = rect.top - sr.top + rect.height / 2 + fs * 0.03 + off.y;
+      fctx.save();
+      fctx.translate(x, y);
+      // Mild horizontal stretch toward the other letter (viscous pull)
+      fctx.transform(1 + Math.abs(skewX) * 0.04, 0, skewX * 0.12, 1, 0, 0);
+      fctx.font = FONT.replace("1px", fs + "px");
+      fctx.fillText(ch, 0, 0);
+      fctx.restore();
+    };
+
+    // M pulls right / S pulls left when attraction rises
+    const stretch = Math.max(0, pullScale - 0.7) * 0.55;
+    drawMold("M", mRect, offM, stretch);
+    drawMold("S", sRect, offS, -stretch);
+
+    // Soft rounded bridge lobes (capsules) — never stroked lines
+    for (let n = 0; n < bridges.length; n++) {
+      const b = bridges[n];
+      if (!b.visible || b.r < 2) continue;
+      const a = b.ma;
+      const s = b.sb;
+      // Organic sausage of overlapping ellipses along the gap
+      const steps = 5;
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        const x = a.x + (s.x - a.x) * t;
+        const y = a.y + (s.y - a.y) * t + Math.sin(t * Math.PI) * pullBiasY * 6;
+        // Fatter in the middle → bulbous viscous bridge
+        const fat = Math.sin(t * Math.PI);
+        const rx = b.r * (0.55 + fat * 0.75);
+        const ry = b.r * (0.4 + fat * 0.55);
+        fctx.beginPath();
+        fctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+        fctx.fill();
+      }
+    }
+
+    // Facing-edge bulge kernels from particles (soft SDF-like plump)
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      if (p.contour < 0.35) continue;
+      const face =
+        p.group === 0
+          ? Math.max(0, p.x - p.rx)
+          : Math.max(0, p.rx - p.x);
+      if (face < 1.5 && pullScale < 1.05) continue;
+      const rad = Math.min(18, 4 + face * 0.45 + p.contour * 5);
+      fctx.beginPath();
+      fctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
+      fctx.fill();
+    }
+
+    fctx.filter = "none";
+
+    // Threshold soft field → solid continuous liquid, then gloss-shade
+    const img = fctx.getImageData(0, 0, w, h);
+    const data = img.data;
+    const alpha = new Uint8ClampedArray(w * h);
+    for (let p = 0, i = 3; p < alpha.length; p++, i += 4) {
+      alpha[p] = data[i];
+    }
+    const THRESH = 90; // after blur, mid-alpha becomes the liquid iso-surface
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const p = py * w + px;
+        const a = alpha[p];
+        const i = p * 4;
+        if (a < THRESH) {
+          data[i] = 0;
+          data[i + 1] = 0;
+          data[i + 2] = 0;
+          data[i + 3] = 0;
+          continue;
+        }
+        const edge = Math.min(1, (a - THRESH) / 80);
+        const depth = Math.min(1, (a - THRESH) / 140);
+        let shine = 0;
+        if (px > 0 && py > 0) {
+          const up = alpha[(py - 1) * w + px];
+          const left = alpha[py * w + (px - 1)];
+          const nx = (a - left) / 255;
+          const ny = (a - up) / 255;
+          shine =
+            Math.pow(Math.max(0, nx * 0.4 + ny * 0.65 + 0.08), 2.2) * edge;
+        }
+        const base = 3 + depth * 7;
+        data[i] = Math.min(255, (base + shine * 155) | 0);
+        data[i + 1] = Math.min(255, (base + shine * 160) | 0);
+        data[i + 2] = Math.min(255, (base + 2 + shine * 170) | 0);
+        data[i + 3] = Math.min(255, (230 + edge * 25) | 0);
+      }
+    }
+    fctx.putImageData(img, 0, 0);
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    if (typeof ctx.filter === "string") {
+      ctx.filter = "blur(0.6px)";
+    }
+    ctx.drawImage(fluid, 0, 0);
+    ctx.filter = "none";
+
+    // Poured-from-above wet sheen
+    ctx.globalCompositeOperation = "screen";
+    const hg = ctx.createLinearGradient(0, h * 0.12, 0, h * 0.5);
+    hg.addColorStop(0, "rgba(210,215,220,0.08)");
+    hg.addColorStop(0.45, "rgba(200,205,210,0.025)");
+    hg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.restore();
   }
 
   function paint() {
@@ -496,43 +585,7 @@
       return;
     }
 
-    // Sticky magnetic bridges between facing edges
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    for (let n = 0; n < links.length; n++) {
-      const a = particles[links[n][0]];
-      const b = particles[links[n][1]];
-      if (!a || !b) continue;
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const d = Math.sqrt(dx * dx + dy * dy) || 1;
-      const thick = Math.max(1.8, 8.5 - d * 0.04);
-      const midX = (a.x + b.x) * 0.5;
-      const midY = (a.y + b.y) * 0.5 + Math.sin(n * 0.7 + (performance.now() - t0) * 0.002) * 1.2;
-      const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-      grad.addColorStop(0, "rgba(8,8,10,0.95)");
-      grad.addColorStop(0.5, "rgba(18,18,20,0.88)");
-      grad.addColorStop(1, "rgba(8,8,10,0.95)");
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = thick;
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.quadraticCurveTo(midX, midY, b.x, b.y);
-      ctx.stroke();
-      // Soft highlight on bridge
-      ctx.strokeStyle = "rgba(180,185,190,0.08)";
-      ctx.lineWidth = Math.max(0.8, thick * 0.28);
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y - thick * 0.2);
-      ctx.quadraticCurveTo(midX, midY - thick * 0.25, b.x, b.y - thick * 0.2);
-      ctx.stroke();
-    }
-
-    // Fluid body — draw contour particles slightly larger last for soft edge
-    const order = particles.slice().sort((a, b) => a.contour - b.contour);
-    for (let i = 0; i < order.length; i++) {
-      paintFluidBlob(order[i]);
-    }
+    paintMetaballs(w, h, sr);
   }
 
   function frame() {
