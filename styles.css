@@ -135,13 +135,6 @@ a {
   overflow: visible;
   z-index: 1;
 }
-.fieldlines path {
-  fill: none;
-  stroke: #000;
-  stroke-width: 1;
-  stroke-linecap: round;
-  opacity: 0.55;
-}
 .mega {
   position: relative;
   z-index: 2;
@@ -158,11 +151,21 @@ a {
   display: block;
   line-height: 0.82;
   font-family: inherit;
-  font-weight: inherit;
-  transition: opacity 0.2s ease, transform 0.15s linear;
+  font-weight: inherit; /* keep Playfair 700 — do not lighten */
+  color: rgba(0, 0, 0, 0.14);
+  -webkit-text-stroke: 1.25px rgba(0, 0, 0, 0.9);
+  transition: transform 0.15s linear, color 0.3s ease;
   will-change: transform;
 }
-.mega .letter:hover { opacity: 0.7; }
+.mega .letter:hover {
+  color: rgba(0, 0, 0, 0.2);
+}
+.fieldlines path {
+  fill: none;
+  stroke: #000;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 .tagline {
   margin: 1.5rem 0 0;
