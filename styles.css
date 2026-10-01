@@ -152,13 +152,14 @@ a {
   line-height: 0.82;
   font-family: inherit;
   font-weight: inherit; /* keep Playfair 700 — do not lighten */
-  color: rgba(0, 0, 0, 0.14);
-  -webkit-text-stroke: 1.25px rgba(0, 0, 0, 0.9);
-  transition: transform 0.15s linear, color 0.3s ease;
+  color: rgba(0, 0, 0, 0.05);
+  -webkit-text-stroke: 0.9px rgba(0, 0, 0, 0.55);
+  transition: transform 0.08s linear;
   will-change: transform;
+  filter: blur(0.2px);
 }
 .mega .letter:hover {
-  color: rgba(0, 0, 0, 0.2);
+  color: rgba(0, 0, 0, 0.08);
 }
 .fieldlines path {
   fill: none;
