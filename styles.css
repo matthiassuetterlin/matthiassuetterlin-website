@@ -1,6 +1,8 @@
 :root {
-  --bg: #fff;
-  --ink: #000;
+  --bg: #1e2022;
+  --ink: #e6e8ea;
+  --ink-dim: rgba(230, 232, 234, 0.55);
+  --metal: #2a2c2e;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -24,25 +26,25 @@ button {
   text-align: left;
 }
 button:focus-visible {
-  outline: 2px solid #000;
+  outline: 2px solid var(--ink);
   outline-offset: 3px;
 }
 
 a {
-  color: #000;
+  color: var(--ink);
   text-decoration: underline;
   text-decoration-thickness: 1.2px;
   text-underline-offset: 0.15em;
 }
 
-/* First-load guidance */
+/* First-load guidance — light ink on dark */
 #guide {
   position: fixed;
   inset: 0;
   z-index: 100;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(30, 32, 34, 0.92);
   padding: 1.5rem;
   transition: opacity 0.6s var(--ease), visibility 0.6s;
 }
@@ -53,15 +55,17 @@ a {
 }
 .guide-card {
   max-width: 28rem;
-  border: 1px solid #000;
+  border: 1px solid rgba(230, 232, 234, 0.35);
   padding: 1.5rem 1.6rem 1.35rem;
-  background: #fff;
+  background: #25282b;
+  color: var(--ink);
 }
 .guide-kicker {
   margin: 0 0 0.6rem;
   font-size: 12px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--ink-dim);
 }
 .guide-body {
   margin: 0 0 1.25rem;
@@ -69,7 +73,7 @@ a {
   line-height: 1.55;
 }
 #guide-ok {
-  border-bottom: 1.2px solid #000;
+  border-bottom: 1.2px solid var(--ink);
   padding-bottom: 2px;
   font-size: 15px;
   letter-spacing: 0.04em;
@@ -88,10 +92,11 @@ a {
   font-size: 14px;
   letter-spacing: 0.04em;
   pointer-events: none;
+  color: var(--ink);
 }
 #btn-out {
   pointer-events: auto;
-  border-bottom: 1.2px solid #000;
+  border-bottom: 1.2px solid var(--ink);
   padding-bottom: 2px;
 }
 #btn-out[hidden] { display: none; }
@@ -120,7 +125,7 @@ a {
 
 .home-inner { width: 100%; }
 
-/* Liquid MS — poured letter molds, viewed from above */
+/* Ferrofluid MS — Playfair molds on brushed metal tray */
 .ms-stage {
   position: relative;
   display: inline-block;
@@ -168,11 +173,12 @@ a {
   flex-wrap: wrap;
   gap: 0.55rem 0.85rem;
   align-items: baseline;
+  color: var(--ink);
 }
 .tagline .sep { opacity: 0.4; }
 
 .text-link {
-  border-bottom: 1.2px solid #000;
+  border-bottom: 1.2px solid var(--ink);
   padding-bottom: 0.08em;
 }
 .text-link:hover { opacity: 0.55; }
@@ -182,6 +188,7 @@ a {
   font-size: 14px;
   letter-spacing: 0.06em;
   opacity: 0.45;
+  color: var(--ink);
 }
 
 .panel {
@@ -246,10 +253,10 @@ a {
   display: grid;
   gap: 0.35rem;
   padding: 1.1rem 0;
-  border-top: 1px solid #000;
+  border-top: 1px solid rgba(230, 232, 234, 0.35);
   width: 100%;
 }
-.project-card:last-child { border-bottom: 1px solid #000; }
+.project-card:last-child { border-bottom: 1px solid rgba(230, 232, 234, 0.35); }
 .project-name {
   font-size: clamp(2rem, 7vw, 3.4rem);
   line-height: 1;
