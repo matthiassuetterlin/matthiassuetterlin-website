@@ -120,7 +120,7 @@ a {
 
 .home-inner { width: 100%; }
 
-/* Flat 2D elastic MS — canvas draws warped Playfair glyphs */
+/* Liquid MS — poured letter molds, viewed from above */
 .ms-stage {
   position: relative;
   display: inline-block;
@@ -134,21 +134,12 @@ a {
   pointer-events: none;
   z-index: 2;
 }
-.fieldlines {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-  z-index: 1;
-}
 .mega {
   position: relative;
   z-index: 3;
   margin: 0;
   display: flex;
-  gap: 0.02em;
+  gap: 0.06em;
   font-family: "Playfair Display", "Times New Roman", Times, serif;
   font-size: clamp(7rem, 40vw, 22rem);
   line-height: 0.82;
@@ -160,17 +151,11 @@ a {
   line-height: 0.82;
   font-family: inherit;
   font-weight: inherit; /* keep Playfair 700 — do not lighten */
-  color: transparent; /* hit target only; canvas paints the glyphs */
+  color: transparent;
   -webkit-text-stroke: 0;
-  transition: none;
-  will-change: auto;
 }
 .mega .letter:hover {
   color: transparent;
-}
-.fieldlines path.mass {
-  fill: #000;
-  stroke: none;
 }
 
 .tagline {
