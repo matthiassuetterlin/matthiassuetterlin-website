@@ -1,73 +1,89 @@
-/* Aesthetic inspired by olgiati.net: white field, black type, Helvetica, large margins */
+/* Extreme minimalism, Olgiati-adjacent: white / black / Helvetica */
+
+* { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+}
 
 body {
   margin: 0;
   background: #fff;
   color: #000;
   font-family: Helvetica, "Helvetica Neue", Arial, sans-serif;
-}
-
-h1, h2, h3 {
-  font-size: inherit;
-  font-weight: inherit;
-  margin: 0;
+  font-size: 18px;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
 }
 
 a {
   color: #000;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1.2px;
+  text-underline-offset: 0.12em;
 }
 a:visited,
 a:hover,
 a:active {
   color: #000;
 }
-a.u {
-  text-decoration: underline;
-  text-decoration-color: #000;
-  text-decoration-thickness: 1.2px;
-  text-underline-offset: 0.12em;
+
+h1, h2 {
+  font-weight: inherit;
+  margin: 0;
+}
+
+/* Full first screen: only name + one line */
+.hero {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 10rem;
+  margin: 0;
+}
+
+.hero h1 {
+  font-size: clamp(3.2rem, 12vw, 8.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  font-weight: 400;
+  text-transform: none;
+  max-width: 12ch;
+}
+
+.hero .tagline {
+  margin: 1.25rem 0 0;
+  font-size: 18px;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  color: #000;
 }
 
 .container {
-  margin: 10rem;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 52rem;
+  margin: 0 10rem 10rem;
+  max-width: 40rem;
 }
 
 .col-text {
   font-size: 18px;
   line-height: 1.7;
-  text-align: left;
-  letter-spacing: 0.01em;
-}
-
-.intro h1 {
-  margin: 0 0 0;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-.intro p {
-  margin: 0;
-}
-
-nav.jump {
-  margin: 2.5rem 0 0;
-}
-nav.jump a {
-  display: inline-block;
-  margin-bottom: 0.15em;
-}
-nav.jump br + a {
-  margin-top: 0;
 }
 
 section {
   margin-top: 80px;
+  padding: 0;
 }
+
+section:first-of-type {
+  margin-top: 0;
+  padding-top: 80px;
+}
+
 section > h2 {
+  font-size: inherit;
+  font-weight: inherit;
   margin: 0 0 1em;
 }
 
@@ -78,23 +94,6 @@ section p:last-child {
   margin-bottom: 0;
 }
 
-.facts {
-  list-style: none;
-  margin: 1.5em 0 0;
-  padding: 0;
-}
-.facts li {
-  position: relative;
-  padding-left: 2em;
-  margin-bottom: 0.5em;
-}
-.facts li::before {
-  content: "–";
-  position: absolute;
-  left: 0;
-  top: 0;
-}
-
 .projects {
   list-style: none;
   margin: 0;
@@ -103,7 +102,7 @@ section p:last-child {
 .projects > li {
   position: relative;
   padding-left: 2em;
-  margin-bottom: 1.6em;
+  margin-bottom: 1.4em;
 }
 .projects > li::before {
   content: "–";
@@ -113,32 +112,25 @@ section p:last-child {
 }
 .projects .title {
   text-decoration: underline;
-  text-decoration-color: #000;
   text-decoration-thickness: 1.2px;
   text-underline-offset: 0.12em;
 }
-.projects .meta {
-  display: block;
-  margin-top: 0.25em;
-}
 
-footer.site-end {
+.site-end {
   margin-top: 80px;
-  padding: 10px 0 0;
-  font-size: 18px;
-  line-height: 1.7;
+  padding: 0;
+  font-size: inherit;
 }
 
 @media (max-width: 900px) {
+  .hero {
+    padding: 2rem;
+  }
   .container {
-    margin: 2rem;
+    margin: 0 2rem 4rem;
   }
-  .col-text,
-  body {
-    font-size: 18px;
-    line-height: 1.7;
-  }
-  section {
-    margin-top: 48px;
+  .hero h1 {
+    font-size: clamp(2.6rem, 14vw, 4.5rem);
+    max-width: none;
   }
 }
