@@ -1,136 +1,296 @@
-/* Extreme minimalism, Olgiati-adjacent: white / black / Helvetica */
-
-* { box-sizing: border-box; }
-
-html {
-  scroll-behavior: smooth;
+:root {
+  --bg: #fff;
+  --ink: #000;
+  --muted: #222;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-body {
+* { box-sizing: border-box; }
+html, body {
   margin: 0;
-  background: #fff;
-  color: #000;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
   font-family: Helvetica, "Helvetica Neue", Arial, sans-serif;
-  font-size: 18px;
-  line-height: 1.7;
-  letter-spacing: 0.01em;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+button:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 4px;
 }
 
 a {
   color: #000;
   text-decoration: underline;
   text-decoration-thickness: 1.2px;
-  text-underline-offset: 0.12em;
-}
-a:visited,
-a:hover,
-a:active {
-  color: #000;
+  text-underline-offset: 0.15em;
 }
 
-h1, h2 {
-  font-weight: inherit;
+#hud {
+  position: fixed;
+  z-index: 40;
+  left: 1.25rem;
+  right: 1.25rem;
+  top: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  pointer-events: none;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+#hud #btn-out {
+  pointer-events: auto;
+  text-transform: lowercase;
+  border-bottom: 1.2px solid #000;
+  padding-bottom: 2px;
+}
+#hud #btn-out[hidden] { display: none; }
+#hint {
   margin: 0;
+  opacity: 0.55;
+  max-width: 28rem;
+  text-align: right;
 }
 
-/* Full first screen: only name + one line */
-.hero {
-  min-height: 100vh;
-  min-height: 100dvh;
+#viewport {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+#viewport.dragging { cursor: grabbing; }
+
+#world {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+  will-change: transform;
+  transition: transform 0.85s var(--ease);
+}
+
+/* Image-like fills inside glyphs (mirrored via background + scale) */
+.fill {
+  display: inline-block;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: cover;
+  background-position: center;
+  filter: contrast(1.15) saturate(0.85);
+}
+.fill-a {
+  background-image:
+    linear-gradient(120deg, rgba(0,0,0,0.15), rgba(255,255,255,0.2)),
+    url("assets/ice.svg");
+  transform: scaleX(-1);
+}
+.fill-b {
+  background-image:
+    linear-gradient(200deg, rgba(0,0,0,0.25), transparent 60%),
+    url("assets/office.svg");
+  transform: scaleX(-1);
+}
+.fill-c {
+  background-image:
+    linear-gradient(0deg, rgba(0,0,0,0.2), transparent),
+    url("assets/grain.svg");
+}
+.fill-d {
+  background-image:
+    linear-gradient(90deg, rgba(255,255,255,0.2), transparent),
+    url("assets/grid.svg");
+  transform: scaleX(-1);
+}
+.fill-e {
+  background-image:
+    linear-gradient(160deg, rgba(0,0,0,0.1), rgba(0,0,0,0.35)),
+    url("assets/dream.svg");
+  transform: scaleX(-1);
+}
+
+.plane-0 {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 10rem;
+  padding: clamp(1.5rem, 6vw, 6rem);
+}
+
+.mega-name {
   margin: 0;
-}
-
-.hero h1 {
-  font-size: clamp(3.2rem, 12vw, 8.5rem);
-  line-height: 0.95;
-  letter-spacing: -0.04em;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.02em;
+  line-height: 0.82;
   font-weight: 400;
-  text-transform: none;
-  max-width: 12ch;
+  letter-spacing: -0.06em;
+  font-size: clamp(8rem, 42vw, 28rem);
+  user-select: none;
+}
+.mega-name .glyph {
+  display: block;
+  line-height: 0.82;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.mega-name .glyph:hover {
+  opacity: 0.85;
+  transform: translateY(-0.5%);
+}
+.mega-name .fill {
+  font-size: 1em;
+  line-height: 0.82;
 }
 
-.hero .tagline {
-  margin: 1.25rem 0 0;
+.mega-sub {
+  margin: 1.5rem 0 0;
+  font-size: clamp(1rem, 3.2vw, 2rem);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: baseline;
+}
+.mega-sub .amp { opacity: 0.35; }
+.word-link {
+  border-bottom: 1.5px solid #000;
+  padding-bottom: 0.1em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.95em;
+}
+.word-link:hover { opacity: 0.65; }
+
+/* Rooms live in absolute space around the origin plane */
+.room {
+  position: absolute;
+  width: min(920px, 92vw);
+  padding: 2rem;
+  opacity: 0.22;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+.room.is-active {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 5;
+}
+
+#room-about {
+  top: -70vh;
+  left: 8vw;
+}
+#room-projects {
+  top: 110vh;
+  left: 10vw;
+  width: min(1100px, 94vw);
+}
+#room-contact {
+  top: 40vh;
+  left: 105vw;
+}
+#room-fernen {
+  top: 210vh;
+  left: -10vw;
+}
+#room-adac {
+  top: 210vh;
+  left: 55vw;
+}
+#room-dreamco {
+  top: 210vh;
+  left: 120vw;
+}
+
+.room-title {
+  margin: 0 0 1.25rem;
+  font-size: clamp(4rem, 18vw, 11rem);
+  line-height: 0.85;
+  letter-spacing: -0.05em;
+  font-weight: 400;
+  user-select: none;
+}
+.room-title.tight {
+  font-size: clamp(3.5rem, 16vw, 9rem);
+}
+.room-body {
+  max-width: 34rem;
   font-size: 18px;
   line-height: 1.7;
   letter-spacing: 0.01em;
-  color: #000;
 }
-
-.container {
-  margin: 0 10rem 10rem;
-  max-width: 40rem;
+.room-body p { margin: 0 0 1em; }
+.eyebrow {
+  font-size: 14px !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
 }
-
-.col-text {
-  font-size: 18px;
-  line-height: 1.7;
-}
-
-section {
-  margin-top: 80px;
-  padding: 0;
-}
-
-section:first-of-type {
-  margin-top: 0;
-  padding-top: 80px;
-}
-
-section > h2 {
-  font-size: inherit;
-  font-weight: inherit;
-  margin: 0 0 1em;
-}
-
-section p {
-  margin: 0 0 1em;
-}
-section p:last-child {
-  margin-bottom: 0;
-}
-
-.projects {
+.room-list {
   list-style: none;
-  margin: 0;
+  margin: 0 0 1.5rem;
   padding: 0;
 }
-.projects > li {
+.room-list li {
   position: relative;
-  padding-left: 2em;
-  margin-bottom: 1.4em;
+  padding-left: 1.5em;
+  margin-bottom: 0.45em;
 }
-.projects > li::before {
+.room-list li::before {
   content: "–";
   position: absolute;
   left: 0;
-  top: 0;
 }
-.projects .title {
-  text-decoration: underline;
-  text-decoration-thickness: 1.2px;
-  text-underline-offset: 0.12em;
+.room-portals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
 }
+.contact-block { font-size: 1.15rem; line-height: 1.85; }
 
-.site-end {
-  margin-top: 80px;
-  padding: 0;
-  font-size: inherit;
+.project-doors {
+  display: grid;
+  gap: 2rem;
+  max-width: none;
 }
+.door {
+  display: grid;
+  gap: 0.35rem;
+  width: 100%;
+}
+.door-type {
+  font-size: clamp(3rem, 12vw, 7rem);
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+}
+.door-meta {
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+.door:hover .door-meta { opacity: 1; }
 
-@media (max-width: 900px) {
-  .hero {
-    padding: 2rem;
-  }
-  .container {
-    margin: 0 2rem 4rem;
-  }
-  .hero h1 {
-    font-size: clamp(2.6rem, 14vw, 4.5rem);
-    max-width: none;
-  }
+@media (max-width: 700px) {
+  #hint { display: none; }
+  .mega-name { font-size: clamp(6rem, 48vw, 12rem); }
+  .room { padding: 1.25rem; }
 }

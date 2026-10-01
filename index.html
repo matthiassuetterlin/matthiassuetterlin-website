@@ -4,63 +4,138 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Matthias Sütterlin</title>
-  <meta name="description" content="Matthias Sütterlin · Dipl.-Ing. (FH) Innenarchitekt · Design Director und Associate Partner bei VAVE" />
+  <meta name="description" content="Matthias Sütterlin · Innenarchitektur und Raumdesign — typografisches Universum" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main>
-    <section class="hero" id="top" aria-label="Intro">
-      <h1>Matthias Sütterlin</h1>
-      <p class="tagline">Innenarchitektur und Raumdesign</p>
-    </section>
+  <div id="hud">
+    <button type="button" id="btn-out" hidden aria-label="Herauszoomen">↑ hinaus</button>
+    <p id="hint">Klicke auf Typografie · Scroll zum Zoomen · Esc = hinaus</p>
+  </div>
 
-    <div class="container col-text">
-      <section id="about">
-        <h2>Über mich</h2>
-        <p>
-          Dipl.-Ing. (FH) Innenarchitekt. Design Director und Associate Partner
-          bei VAVE — räumliche Markenerlebnisse für Markenauftritte, Handel,
-          Veranstaltungen und Arbeitswelten im Raum Frankfurt / Offenbach.
+  <div id="viewport" tabindex="0" aria-label="Typografisches Universum">
+    <div id="world">
+      <!-- LEVEL 0: giant name with image-filled letters -->
+      <div class="plane plane-0" data-level="0">
+        <h1 class="mega-name" aria-label="Matthias Sütterlin">
+          <button type="button" class="glyph portal" data-target="about" data-label="Über mich" aria-label="Zoom: Über mich">
+            <span class="fill fill-a">M</span>
+          </button>
+          <button type="button" class="glyph portal" data-target="about" data-label="Über mich" aria-label="Zoom: Über mich">
+            <span class="fill fill-b">S</span>
+          </button>
+        </h1>
+        <p class="mega-sub portal-text" data-target="projects">
+          <button type="button" class="word-link" data-target="projects">INNENARCHITEKTUR</button>
+          <span class="amp">&</span>
+          <button type="button" class="word-link" data-target="contact">RAUMDESIGN</button>
         </p>
-        <p>
-          Ausbildung als Tischler, Studium der Innenarchitektur an der
-          Hochschule RheinMain. Stationen unter anderem bei innen_architekten
-          BALS+WIRTH und 3deluxe; seit vielen Jahren bei VAVE.
-        </p>
+      </div>
+
+      <!-- LEVEL 1 rooms: positioned in space around / behind letters -->
+      <section class="room" id="room-about" data-room="about" aria-label="Über mich">
+        <h2 class="room-title fill fill-c">ÜBER&nbsp;MICH</h2>
+        <div class="room-body">
+          <p>
+            Dipl.-Ing. (FH) Innenarchitekt. Design Director und Associate Partner
+            bei VAVE — räumliche Markenerlebnisse für Markenauftritte, Handel,
+            Veranstaltungen und Arbeitswelten im Raum Frankfurt / Offenbach.
+          </p>
+          <p>
+            Ausbildung als Tischler, Studium der Innenarchitektur an der
+            Hochschule RheinMain. Stationen unter anderem bei innen_architekten
+            BALS+WIRTH und 3deluxe; seit vielen Jahren bei VAVE.
+          </p>
+          <ul class="room-list">
+            <li>Rolle — Design Director und Associate Partner, VAVE</li>
+            <li>Fokus — Räumliche Markenerlebnisse · Messen und Events</li>
+            <li>Standort — Frankfurt / Offenbach · Ihringen</li>
+          </ul>
+          <div class="room-portals">
+            <button type="button" class="word-link" data-target="projects">→ Projekte</button>
+            <button type="button" class="word-link" data-target="contact">→ Kontakt</button>
+          </div>
+        </div>
       </section>
 
-      <section id="projects">
-        <h2>Projekte</h2>
-        <ul class="projects">
-          <li>
-            <span class="title">ferner.Welten — Zentrum für Glaziologie</span>, 2012.
-            Diplomprojekt am Rhônegletscher (Wallis, Schweiz).
-          </li>
-          <li>
-            <span class="title">ADAC Mittelrhein — Büroflächen Koblenz</span>, 2014.
-            Bürokonzept, Mitarbeit bei innen_architekten BALS+WIRTH.
-          </li>
-          <li>
-            <span class="title">DreamCo — Imagining your dreams</span>, 2023–24.
-            Interaktive KI-Installation, Art Direction bei VAVE.
-          </li>
-        </ul>
+      <section class="room" id="room-projects" data-room="projects" aria-label="Projekte">
+        <h2 class="room-title fill fill-d">PROJEKTE</h2>
+        <div class="room-body project-doors">
+          <button type="button" class="door portal" data-target="fernen" aria-label="Zoom: ferner.Welten">
+            <span class="door-type fill fill-a">ferner.Welten</span>
+            <span class="door-meta">2012 · Diplom</span>
+          </button>
+          <button type="button" class="door portal" data-target="adac" aria-label="Zoom: ADAC Koblenz">
+            <span class="door-type fill fill-b">ADAC</span>
+            <span class="door-meta">2014 · Koblenz</span>
+          </button>
+          <button type="button" class="door portal" data-target="dreamco" aria-label="Zoom: DreamCo">
+            <span class="door-type fill fill-e">DreamCo</span>
+            <span class="door-meta">2023–24 · VAVE</span>
+          </button>
+        </div>
       </section>
 
-      <section id="contact">
-        <h2>Kontakt</h2>
-        <p>
-          <a href="mailto:info@matthiassuetterlin.de">info@matthiassuetterlin.de</a><br />
-          Quellenstraße 3<br />
-          79241 Ihringen
-        </p>
+      <section class="room room-deep" id="room-fernen" data-room="fernen" aria-label="ferner.Welten">
+        <h2 class="room-title tight fill fill-a">ferner.<br />Welten</h2>
+        <div class="room-body">
+          <p class="eyebrow">2012 · Diplomarbeit · Rhônegletscher</p>
+          <p>
+            <strong>Zentrum für Glaziologie</strong> — Forschungs- und Erlebniszentrum
+            am Rhônegletscher (Wallis, Schweiz). Architektur als Plattform für
+            Glaziologie, Bildung und Klimabewusstsein — international unter anderem
+            bei eVolo vorgestellt.
+          </p>
+          <button type="button" class="word-link" data-target="projects">← Projekte</button>
+        </div>
       </section>
 
-      <footer class="site-end">
-        © <span id="y"></span> Matthias Sütterlin
-      </footer>
+      <section class="room room-deep" id="room-adac" data-room="adac" aria-label="ADAC Mittelrhein">
+        <h2 class="room-title tight fill fill-b">ADAC<br />Koblenz</h2>
+        <div class="room-body">
+          <p class="eyebrow">2014 · Arbeitswelt · BALS+WIRTH</p>
+          <p>
+            <strong>ADAC Mittelrhein — Büroflächen Koblenz</strong>. Bürokonzept über
+            zwei Geschosse (etwa 1.320&nbsp;m²). Dynamische Linien aus dem Thema
+            Mobilität — Mitarbeit bei innen_architekten BALS+WIRTH.
+          </p>
+          <button type="button" class="word-link" data-target="projects">← Projekte</button>
+        </div>
+      </section>
+
+      <section class="room room-deep" id="room-dreamco" data-room="dreamco" aria-label="DreamCo">
+        <h2 class="room-title tight fill fill-e">Dream<br />Co</h2>
+        <div class="room-body">
+          <p class="eyebrow">2023–24 · Installation · VAVE · KI</p>
+          <p>
+            <strong>DreamCo — Imagining your dreams</strong>. Interaktive KI-Installation
+            (Design Shanghai): Traumbeschreibungen und Selfies werden zu persönlichen
+            Bildern. Art Direction bei VAVE; unter anderem ADCE Bronze.
+          </p>
+          <button type="button" class="word-link" data-target="projects">← Projekte</button>
+        </div>
+      </section>
+
+      <section class="room" id="room-contact" data-room="contact" aria-label="Kontakt">
+        <h2 class="room-title fill fill-c">KONTAKT</h2>
+        <div class="room-body">
+          <p>
+            Anfragen zu Projekten, Kollaborationen oder Vorträgen gerne per E-Mail.
+          </p>
+          <p class="contact-block">
+            <a href="mailto:info@matthiassuetterlin.de">info@matthiassuetterlin.de</a><br />
+            Quellenstraße 3<br />
+            79241 Ihringen
+          </p>
+          <div class="room-portals">
+            <button type="button" class="word-link" data-target="about">→ Über mich</button>
+            <button type="button" class="word-link" data-target="projects">→ Projekte</button>
+          </div>
+        </div>
+      </section>
     </div>
-  </main>
-  <script>document.getElementById("y").textContent = new Date().getFullYear();</script>
+  </div>
+
+  <script src="universe.js"></script>
 </body>
 </html>
