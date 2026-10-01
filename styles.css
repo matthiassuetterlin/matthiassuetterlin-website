@@ -144,7 +144,7 @@ a {
   z-index: 3;
   margin: 0;
   display: flex;
-  gap: 0.12em;
+  gap: 0.14em;
   font-family: "Playfair Display", "Times New Roman", Times, serif;
   font-size: clamp(7rem, 40vw, 22rem);
   line-height: 0.82;
