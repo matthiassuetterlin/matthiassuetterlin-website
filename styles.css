@@ -115,14 +115,33 @@ a {
 .view.is-active {
   display: flex;
   align-items: center;
+  justify-content: center;
   animation: enter 0.45s var(--ease);
+}
+.view-home.is-active {
+  justify-content: center;
+  align-items: center;
 }
 @keyframes enter {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
 
-.home-inner { width: 100%; }
+.home-inner {
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.ms-stage {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 auto;
+}
 
 /* Solid MS — organic serif merge */
 .ms-canvas {
@@ -138,6 +157,7 @@ a {
   z-index: 3;
   margin: 0;
   display: flex;
+  justify-content: center;
   gap: 0.1em;
   font-family: "Playfair Display", "Times New Roman", Times, serif;
   font-size: clamp(7rem, 40vw, 22rem);
@@ -183,6 +203,7 @@ a {
   letter-spacing: 0.06em;
   opacity: 0.45;
   color: var(--ink);
+  text-align: center;
 }
 
 .panel {
