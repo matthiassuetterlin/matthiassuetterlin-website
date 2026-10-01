@@ -120,22 +120,49 @@ a {
 
 .home-inner { width: 100%; }
 
-/* Crisp vector type — never CSS-scaled as a bitmap layer */
+/* Strong serif MS + magnetic field lines */
+.ms-stage {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+.fieldlines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+.fieldlines path {
+  fill: none;
+  stroke: #000;
+  stroke-width: 1;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
 .mega {
+  position: relative;
+  z-index: 2;
   margin: 0;
   display: flex;
-  gap: 0.02em;
+  gap: 0.08em;
+  font-family: "Playfair Display", "Times New Roman", Times, serif;
   font-size: clamp(7rem, 40vw, 22rem);
   line-height: 0.82;
-  letter-spacing: -0.06em;
-  font-weight: 400;
+  letter-spacing: -0.04em;
+  font-weight: 700;
 }
 .mega .letter {
   display: block;
   line-height: 0.82;
-  transition: opacity 0.2s ease;
+  font-family: inherit;
+  font-weight: inherit;
+  transition: opacity 0.2s ease, transform 0.15s linear;
+  will-change: transform;
 }
-.mega .letter:hover { opacity: 0.55; }
+.mega .letter:hover { opacity: 0.7; }
 
 .tagline {
   margin: 1.5rem 0 0;
@@ -242,4 +269,5 @@ a {
 
 @media (max-width: 640px) {
   .mega { font-size: clamp(5.5rem, 42vw, 9rem); }
+  .fieldlines path { stroke-width: 0.8; opacity: 0.45; }
 }

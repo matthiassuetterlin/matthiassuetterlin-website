@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Matthias Sütterlin</title>
   <meta name="description" content="Matthias Sütterlin · Innenarchitektur und Raumdesign" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -29,16 +32,19 @@
     <!-- Home: crisp 1:1 typography, no CSS upscaling -->
     <section class="view view-home is-active" id="view-home" data-view="home" aria-label="Start">
       <div class="home-inner">
-        <h1 class="mega" aria-label="Matthias Sütterlin — Bereiche öffnen">
-          <button type="button" class="letter" data-go="about" aria-label="Über mich öffnen">M</button>
-          <button type="button" class="letter" data-go="about" aria-label="Über mich öffnen">S</button>
-        </h1>
+        <div class="ms-stage" id="ms-stage" aria-label="Matthias Sütterlin">
+          <svg class="fieldlines" id="fieldlines" aria-hidden="true"></svg>
+          <h1 class="mega">
+            <button type="button" class="letter letter-m" id="letter-m" data-go="about" aria-label="Über mich öffnen">M</button>
+            <button type="button" class="letter letter-s" id="letter-s" data-go="about" aria-label="Über mich öffnen">S</button>
+          </h1>
+        </div>
         <p class="tagline">
           <button type="button" class="text-link" data-go="projects">Innenarchitektur</button>
           <span class="sep">und</span>
           <button type="button" class="text-link" data-go="contact">Raumdesign</button>
         </p>
-        <p class="home-hint">Bereiche öffnen durch Tippen auf die Typografie</p>
+        <p class="home-hint">Bereiche öffnen durch Tippen · Feldlinien folgen der Maus</p>
       </div>
     </section>
 
@@ -150,5 +156,6 @@
   </div>
 
   <script src="universe.js"></script>
+  <script src="fieldlines.js"></script>
 </body>
 </html>
