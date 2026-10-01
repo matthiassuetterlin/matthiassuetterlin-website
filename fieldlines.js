@@ -6,17 +6,35 @@
   const home = document.getElementById("view-home");
   if (!stage || !svg || !letterM || !letterS) return;
 
-  const LINE_COUNT = 52;
-  const paths = [];
-  for (let i = 0; i < LINE_COUNT; i++) {
+  const RIBBONS = 14;
+  const BLOBS = 5;
+  const DROPS = 9;
+
+  const ribbons = [];
+  const blobs = [];
+  const drops = [];
+
+  for (let i = 0; i < RIBBONS; i++) {
     const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("class", "ribbon");
     svg.appendChild(p);
-    paths.push(p);
+    ribbons.push(p);
+  }
+  for (let i = 0; i < BLOBS; i++) {
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("class", "blob");
+    svg.appendChild(p);
+    blobs.push(p);
+  }
+  for (let i = 0; i < DROPS; i++) {
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("class", "drop");
+    svg.appendChild(c);
+    drops.push({ el: c, phase: Math.random() * Math.PI * 2, speed: 0.35 + Math.random() * 0.55, r: 3 + Math.random() * 9 });
   }
 
   let mouse = { x: 0, y: 0 };
   let smooth = { x: 0, y: 0 };
-  let vel = { x: 0, y: 0 };
   let hasMouse = false;
   let t0 = performance.now();
 
@@ -26,39 +44,39 @@
   function clamp(v, a, b) {
     return Math.max(a, Math.min(b, v));
   }
-  function noise(t, seed) {
-    return Math.sin(t * 1.7 + seed * 12.9898) * Math.cos(t * 2.3 + seed * 78.233);
+  function softNoise(t, seed) {
+    return Math.sin(t * 0.9 + seed * 12.9898) * 0.55 + Math.sin(t * 1.7 + seed * 4.1) * 0.45;
   }
 
-  function bands(rect, sr, side) {
+  /** Anchor points along letter edges that act as “serifs” pulling toward each other */
+  function serifAnchors(rect, sr, side) {
     const x0 = rect.left - sr.left;
     const y0 = rect.top - sr.top;
     const w = rect.width;
     const h = rect.height;
-    const out = [];
-    for (let i = 0; i < LINE_COUNT; i++) {
-      const u = i / (LINE_COUNT - 1);
-      const y = y0 + h * (-0.05 + u * 1.1);
-      const swirl = Math.sin(u * Math.PI * 5) * 0.2;
+    const pts = [];
+    // top serif, mid stem, bottom serif — plus extras for viscosity
+    const ys = [0.08, 0.22, 0.38, 0.5, 0.62, 0.78, 0.92];
+    for (let i = 0; i < ys.length; i++) {
+      const u = ys[i];
+      const y = y0 + h * u;
       if (side === "m") {
-        out.push({
+        pts.push({
           u,
-          xin: x0 + w * (0.02 + Math.abs(swirl) * 0.25),
-          xmid: x0 + w * (0.45 + swirl * 0.35),
-          xout: x0 + w * (0.92 + swirl * 0.2),
-          y,
+          outer: { x: x0 + w * 0.08, y },
+          inner: { x: x0 + w * 0.94, y },
+          tip: { x: x0 + w * (u < 0.2 || u > 0.8 ? 0.98 : 0.88), y: y + (u - 0.5) * h * 0.04 },
         });
       } else {
-        out.push({
+        pts.push({
           u,
-          xin: x0 + w * (0.05 + swirl * 0.2),
-          xmid: x0 + w * (0.5 - swirl * 0.35),
-          xout: x0 + w * (0.98 - Math.abs(swirl) * 0.2),
-          y,
+          outer: { x: x0 + w * 0.92, y },
+          inner: { x: x0 + w * 0.06, y },
+          tip: { x: x0 + w * (u < 0.2 || u > 0.8 ? 0.02 : 0.12), y: y + (u - 0.5) * h * 0.04 },
         });
       }
     }
-    return out;
+    return pts;
   }
 
   function draw(now) {
@@ -74,79 +92,91 @@
     svg.setAttribute("width", String(sr.width));
     svg.setAttribute("height", String(sr.height));
 
-    const targetX = hasMouse ? mouse.x - sr.left : sr.width * 0.5 + Math.sin((now - t0) / 900) * sr.width * 0.08;
-    const targetY = hasMouse ? mouse.y - sr.top : sr.height * 0.4 + Math.cos((now - t0) / 1100) * sr.height * 0.06;
-    vel.x = (targetX - smooth.x) * 0.18;
-    vel.y = (targetY - smooth.y) * 0.18;
-    smooth.x += vel.x;
-    smooth.y += vel.y;
+    const time = (now - t0) / 1000;
+    const targetX = hasMouse ? mouse.x - sr.left : sr.width * 0.5 + softNoise(time * 0.6, 1) * sr.width * 0.04;
+    const targetY = hasMouse ? mouse.y - sr.top : sr.height * 0.42 + softNoise(time * 0.5, 2) * sr.height * 0.03;
+    // Viscous lag — slow, heavy
+    smooth.x = lerp(smooth.x, targetX, 0.045);
+    smooth.y = lerp(smooth.y, targetY, 0.045);
 
     const midX = (mr.right + srr.left) / 2 - sr.left;
     const midY = (mr.top + mr.bottom) / 2 - sr.top;
-    const pullX = (smooth.x - midX) * 1.15;
-    const pullY = (smooth.y - midY) * 1.15;
-    const speed = Math.hypot(vel.x, vel.y);
-    const time = (now - t0) / 1000;
+    const pullX = (smooth.x - midX) * 0.55;
+    const pullY = (smooth.y - midY) * 0.55;
 
-    // Wild glyph drift — still Playfair 700, just moving hard
-    const mx = clamp(pullX * 0.09 + noise(time, 1) * 14, -28, 28);
-    const my = clamp(pullY * 0.08 + noise(time, 2) * 12, -22, 22);
-    const rotM = clamp(pullY * 0.02 + noise(time, 3) * 3.5, -8, 8);
-    const rotS = clamp(-pullY * 0.02 + noise(time, 4) * 3.5, -8, 8);
-    letterM.style.transform = `translate(${mx}px, ${my}px) rotate(${rotM}deg)`;
-    letterS.style.transform = `translate(${-mx * 1.1}px, ${-my * 0.95}px) rotate(${rotS}deg)`;
+    // Gentle squash toward each other — serifs “attract”
+    const attract = 10 + Math.abs(softNoise(time, 0)) * 6;
+    const mx = clamp(pullX * 0.04 + softNoise(time * 0.7, 3) * 4, -14, 14);
+    const my = clamp(pullY * 0.035 + softNoise(time * 0.65, 4) * 3, -10, 10);
+    letterM.style.transform = `translate(${mx + attract * 0.35}px, ${my}px) scale(${1.02 + softNoise(time * 0.5, 5) * 0.015}, ${0.985 + softNoise(time * 0.55, 6) * 0.012})`;
+    letterS.style.transform = `translate(${-mx - attract * 0.35}px, ${-my * 0.9}px) scale(${1.02 + softNoise(time * 0.5, 7) * 0.015}, ${0.985 + softNoise(time * 0.55, 8) * 0.012})`;
 
-    const mPts = bands(mr, sr, "m");
-    const sPts = bands(srr, sr, "s");
+    const mA = serifAnchors(mr, sr, "m");
+    const sA = serifAnchors(srr, sr, "s");
 
-    for (let i = 0; i < LINE_COUNT; i++) {
-      const a = mPts[i];
-      const b = sPts[i];
-      const u = a.u;
-      const fan = (u - 0.5) * 2;
-      const n1 = noise(time * 2.2, u * 10 + i);
-      const n2 = noise(time * 1.6, u * 17 + 3);
-      const n3 = noise(time * 2.8, i * 0.37);
-      const chaos = 38 + speed * 2.5;
+    // Thick viscous ribbons between facing serifs
+    for (let i = 0; i < RIBBONS; i++) {
+      const ai = Math.min(mA.length - 1, Math.floor((i / (RIBBONS - 1)) * (mA.length - 1)));
+      const a = mA[ai];
+      const b = sA[ai];
+      const n1 = softNoise(time * 1.1, i * 1.7);
+      const n2 = softNoise(time * 0.85, i * 2.3 + 2);
+      const fan = (a.u - 0.5) * 2;
 
-      const p0x = a.xin + n1 * 18;
-      const p0y = a.y + n2 * 22 + Math.sin(time * 3 + i) * 16;
-      const p1x = a.xmid + pullX * 0.15 + n3 * 20;
-      const p1y = a.y + fan * 20 + n1 * chaos * 0.35;
-      const p2x = a.xout + n2 * 14;
-      const p2y = a.y + n3 * 18;
+      const x0 = a.tip.x;
+      const y0 = a.tip.y + n1 * 6;
+      const x1 = lerp(a.tip.x, b.tip.x, 0.28) + pullX * 0.2 + n2 * 10;
+      const y1 = lerp(a.tip.y, b.tip.y, 0.22) + fan * 18 + n1 * 14 + pullY * 0.25;
+      const x2 = lerp(a.tip.x, b.tip.x, 0.5) + pullX * 0.45 + n1 * 16;
+      const y2 = lerp(a.tip.y, b.tip.y, 0.5) + pullY * 0.5 + fan * (28 + Math.abs(n2) * 12) + Math.sin(time * 1.2 + i) * 10;
+      const x3 = lerp(a.tip.x, b.tip.x, 0.72) - pullX * 0.15 + n2 * 10;
+      const y3 = lerp(a.tip.y, b.tip.y, 0.78) - fan * 16 + n1 * 12;
+      const x4 = b.tip.x;
+      const y4 = b.tip.y + n2 * 6;
 
-      const gapX = lerp(a.xout, b.xin, 0.5) + pullX * 0.85 + n1 * chaos;
-      const gapY =
-        lerp(a.y, b.y, 0.5) +
-        pullY * 0.9 +
-        fan * (55 + Math.abs(pullX) * 0.12) +
-        n2 * chaos * 1.2 +
-        Math.sin(time * 4.5 + u * 14) * 28;
+      const d = `M ${x0.toFixed(1)} ${y0.toFixed(1)} C ${x1.toFixed(1)} ${y1.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)} C ${x3.toFixed(1)} ${y3.toFixed(1)}, ${x4.toFixed(1)} ${y4.toFixed(1)}, ${x4.toFixed(1)} ${y4.toFixed(1)}`;
+      ribbons[i].setAttribute("d", d);
+      // Thick center filaments, thinner outer — milk-bridge look
+      const weight = 4.5 + (1 - Math.abs(fan)) * 7 + Math.abs(n1) * 3;
+      ribbons[i].setAttribute("stroke-width", weight.toFixed(2));
+      ribbons[i].style.opacity = String(0.55 + (1 - Math.abs(fan)) * 0.35);
+    }
 
-      const p3x = b.xin + n3 * 14;
-      const p3y = b.y - n1 * 18;
-      const p4x = b.xmid - pullX * 0.12 + n2 * 18;
-      const p4y = b.y - fan * 18 + n3 * chaos * 0.3;
-      const p5x = b.xout + n1 * 16;
-      const p5y = b.y + Math.cos(time * 3.2 + i * 0.9) * 18;
-
-      // Extra loop in the gap so the mass tangles
-      const loopX = gapX + Math.cos(time * 3 + i) * (30 + speed);
-      const loopY = gapY + Math.sin(time * 3 + i) * (34 + speed);
-
+    // Soft filled bridges / puddles in the gap (viscous mass)
+    for (let i = 0; i < BLOBS; i++) {
+      const u = (i + 0.5) / BLOBS;
+      const a = mA[Math.min(mA.length - 1, Math.round(u * (mA.length - 1)))];
+      const b = sA[Math.min(sA.length - 1, Math.round(u * (sA.length - 1)))];
+      const n = softNoise(time * 0.9, i * 5.1);
+      const cx = lerp(a.tip.x, b.tip.x, 0.5) + pullX * 0.35 + n * 8;
+      const cy = lerp(a.tip.y, b.tip.y, 0.5) + pullY * 0.35 + softNoise(time, i) * 10;
+      const rx = 22 + (1 - Math.abs(u - 0.5) * 2) * 38 + Math.abs(n) * 14;
+      const ry = 16 + Math.abs(n) * 18 + Math.sin(time + i) * 6;
+      const left = a.tip.x - 4;
+      const right = b.tip.x + 4;
       const d = [
-        `M ${p0x.toFixed(1)} ${p0y.toFixed(1)}`,
-        `C ${p1x.toFixed(1)} ${p1y.toFixed(1)}, ${p2x.toFixed(1)} ${p2y.toFixed(1)}, ${p2x.toFixed(1)} ${p2y.toFixed(1)}`,
-        `C ${lerp(p2x, gapX, 0.4).toFixed(1)} ${lerp(p2y, gapY, 0.25).toFixed(1)}, ${loopX.toFixed(1)} ${loopY.toFixed(1)}, ${gapX.toFixed(1)} ${gapY.toFixed(1)}`,
-        `C ${(gapX + (gapX - loopX)).toFixed(1)} ${(gapY + (gapY - loopY)).toFixed(1)}, ${lerp(gapX, p3x, 0.55).toFixed(1)} ${lerp(gapY, p3y, 0.6).toFixed(1)}, ${p3x.toFixed(1)} ${p3y.toFixed(1)}`,
-        `C ${p4x.toFixed(1)} ${p4y.toFixed(1)}, ${p5x.toFixed(1)} ${p5y.toFixed(1)}, ${p5x.toFixed(1)} ${p5y.toFixed(1)}`,
+        `M ${left.toFixed(1)} ${a.tip.y.toFixed(1)}`,
+        `C ${(left + rx * 0.4).toFixed(1)} ${(a.tip.y - ry).toFixed(1)}, ${(cx - rx * 0.3).toFixed(1)} ${(cy - ry * 1.1).toFixed(1)}, ${cx.toFixed(1)} ${(cy - ry * 0.7).toFixed(1)}`,
+        `C ${(cx + rx * 0.35).toFixed(1)} ${(cy - ry).toFixed(1)}, ${(right - rx * 0.35).toFixed(1)} ${(b.tip.y - ry * 0.6).toFixed(1)}, ${right.toFixed(1)} ${b.tip.y.toFixed(1)}`,
+        `C ${(right - 6).toFixed(1)} ${(b.tip.y + ry * 0.85).toFixed(1)}, ${(cx + rx * 0.2).toFixed(1)} ${(cy + ry * 1.05).toFixed(1)}, ${cx.toFixed(1)} ${(cy + ry * 0.75).toFixed(1)}`,
+        `C ${(cx - rx * 0.25).toFixed(1)} ${(cy + ry).toFixed(1)}, ${(left + 8).toFixed(1)} ${(a.tip.y + ry * 0.7).toFixed(1)}, ${left.toFixed(1)} ${a.tip.y.toFixed(1)}`,
+        "Z",
       ].join(" ");
+      blobs[i].setAttribute("d", d);
+      blobs[i].style.opacity = String(0.35 + (1 - Math.abs(u - 0.5) * 2) * 0.4);
+    }
 
-      paths[i].setAttribute("d", d);
-      const weight = 0.55 + Math.abs(n2) * 1.4 + (i % 3 === 0 ? 1.1 : 0);
-      paths[i].setAttribute("stroke-width", weight.toFixed(2));
-      paths[i].style.opacity = String(0.18 + Math.abs(n1) * 0.35 + Math.sin(u * Math.PI) * 0.25);
+    // Floating droplets above / around the melt
+    for (let i = 0; i < DROPS; i++) {
+      const d = drops[i];
+      const orbit = softNoise(time * d.speed, i * 3);
+      const bx = midX + pullX * 0.2 + Math.sin(time * d.speed + d.phase) * (sr.width * 0.18);
+      const by = midY - sr.height * 0.22 + Math.cos(time * d.speed * 0.8 + d.phase) * (sr.height * 0.12) + orbit * 12;
+      const r = d.r * (0.85 + 0.2 * Math.sin(time * 2 + d.phase));
+      d.el.setAttribute("cx", bx.toFixed(1));
+      d.el.setAttribute("cy", by.toFixed(1));
+      d.el.setAttribute("r", r.toFixed(1));
+      d.el.style.opacity = String(0.45 + Math.abs(orbit) * 0.35);
     }
   }
 

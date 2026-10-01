@@ -140,7 +140,7 @@ a {
   z-index: 2;
   margin: 0;
   display: flex;
-  gap: 0.08em;
+  gap: 0.02em;
   font-family: "Playfair Display", "Times New Roman", Times, serif;
   font-size: clamp(7rem, 40vw, 22rem);
   line-height: 0.82;
@@ -152,20 +152,30 @@ a {
   line-height: 0.82;
   font-family: inherit;
   font-weight: inherit; /* keep Playfair 700 — do not lighten */
-  color: rgba(0, 0, 0, 0.05);
-  -webkit-text-stroke: 0.9px rgba(0, 0, 0, 0.55);
-  transition: transform 0.08s linear;
+  color: rgba(0, 0, 0, 0.88);
+  -webkit-text-stroke: 0;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
-  filter: blur(0.2px);
+  filter: blur(0.35px);
+  border-radius: 0.04em;
 }
 .mega .letter:hover {
-  color: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.95);
 }
-.fieldlines path {
+.fieldlines path.ribbon {
   fill: none;
   stroke: #000;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+.fieldlines path.blob {
+  fill: #000;
+  stroke: none;
+  opacity: 0.92;
+}
+.fieldlines circle.drop {
+  fill: #000;
+  opacity: 0.85;
 }
 
 .tagline {
