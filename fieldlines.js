@@ -1,7 +1,7 @@
 (() => {
   /**
-   * Dual magnetic fluids (from v2): clear letter contours that melt together
-   * on approach. Readable forms, merge cap, no cursor blot, full-page mouse.
+   * Dual magnetic fluids: whole-body attraction, continuous melt bridge.
+   * Cleaner field (fewer soft masses, more blur) — less pixel noise.
    */
   const stage = document.getElementById("ms-stage");
   const canvas = document.getElementById("ms-canvas");
@@ -33,7 +33,7 @@
   let boxAge = 0;
 
   // Cap internal sim resolution — biggest FPS win vs full-viewport × SS
-  const MAX_EDGE = 1120;
+  const MAX_EDGE = 1280;
 
   const FONT =
     '700 1px "Playfair Display", "Times New Roman", Times, Georgia, serif';
@@ -160,7 +160,7 @@
     if (r < 0.5) return;
     const g = fctx.createRadialGradient(x, y, 0, x, y, r);
     g.addColorStop(0, `rgba(255,255,255,${a})`);
-    g.addColorStop(0.4, `rgba(255,255,255,${a * 0.65})`);
+    g.addColorStop(0.45, `rgba(255,255,255,${a * 0.55})`);
     g.addColorStop(1, "rgba(255,255,255,0)");
     fctx.fillStyle = g;
     fctx.beginPath();
@@ -168,19 +168,55 @@
     fctx.fill();
   }
 
+  // Soft ellipse mass — covers a letter body or a continuous bridge lobe
+  function softEllipse(x, y, rx, ry, a) {
+    if (rx < 0.5 || ry < 0.5) return;
+    fctx.save();
+    fctx.translate(x, y);
+    fctx.scale(rx, ry);
+    const g = fctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, `rgba(255,255,255,${a})`);
+    g.addColorStop(0.5, `rgba(255,255,255,${a * 0.45})`);
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    fctx.fillStyle = g;
+    fctx.beginPath();
+    fctx.arc(0, 0, 1, 0, Math.PI * 2);
+    fctx.fill();
+    fctx.restore();
+  }
+
+  // Continuous magnetic filament between two points (whole-body link, not dotted)
+  function softCapsule(x0, y0, x1, y1, radius, a) {
+    if (radius < 0.5) return;
+    fctx.save();
+    fctx.strokeStyle = `rgba(255,255,255,${a})`;
+    fctx.lineWidth = radius * 2;
+    fctx.lineCap = "round";
+    fctx.lineJoin = "round";
+    fctx.shadowColor = `rgba(255,255,255,${a * 0.85})`;
+    fctx.shadowBlur = radius * 1.1;
+    fctx.beginPath();
+    fctx.moveTo(x0, y0);
+    fctx.lineTo(x1, y1);
+    fctx.stroke();
+    fctx.restore();
+  }
+
   function softThreshold() {
     const img = fctx.getImageData(0, 0, iw, ih);
     const d = img.data;
-    // Narrow ramp → cleaner contour, still slightly soft for fluid
-    const lo = 148;
-    const hi = 168;
+    // Slightly wider ramp + higher res = less stair-step noise
+    const lo = 132;
+    const hi = 172;
     const inv = 1 / (hi - lo);
     for (let i = 0; i < d.length; i += 4) {
       const v = d[i];
       if (v <= lo) {
         d[i + 3] = 0;
       } else {
-        const t = v >= hi ? 1 : (v - lo) * inv;
+        const tt = v >= hi ? 1 : (v - lo) * inv;
+        // smoothstep for cleaner edges
+        const t = tt * tt * (3 - 2 * tt);
         d[i] = 0;
         d[i + 1] = 0;
         d[i + 2] = 0;
@@ -321,72 +357,74 @@
 
     const mRight = mCx + b.m.w * 0.28;
     const sLeft = sCx - b.s.w * 0.28;
-    const baseY = (mCy + sCy) * 0.5 + Math.min(b.m.h, b.s.h) * 0.14;
+    const letterH = Math.min(b.m.h, b.s.h);
+    const baseY = (mCy + sCy) * 0.5 + letterH * 0.12;
     const gap = Math.max(4, sLeft - mRight);
     const strand = clamp(gap / (90 * scale), 0, 1);
-    // meltStrength: thick bridge when close; thin whisper when far (clear dual contours)
-    const meltStrength = clamp(mergeAmp * (0.35 + melt * 0.75) * (1 - strand * 0.65), 0, MERGE_CAP);
-    const plump = (7 + meltStrength * 34) * scale;
-
-    // Facing magnetic bulges — each fluid reaches toward the other
-    const bulge = (10 + meltStrength * 38) * scale * (0.55 + melt * 0.55);
-    const reachFrac = 0.15 + meltStrength * 0.42 * (1 - strand * 0.5);
-    blob(mRight + gap * reachFrac * 0.45, baseY + Math.sin(time * 1.8) * 4 * scale, bulge, 1);
-    blob(sLeft - gap * reachFrac * 0.45, baseY + Math.cos(time * 1.9) * 4 * scale, bulge * 1.05, 1);
-    // Secondary facing lobes (serif / waist height) for dual-body read
-    blob(
-      mRight + gap * reachFrac * 0.25,
-      baseY - Math.min(b.m.h, b.s.h) * 0.22 + Math.sin(time * 2.3) * 3 * scale,
-      bulge * 0.55,
-      0.9
-    );
-    blob(
-      sLeft - gap * reachFrac * 0.25,
-      baseY - Math.min(b.m.h, b.s.h) * 0.18 + Math.cos(time * 2.1) * 3 * scale,
-      bulge * 0.55,
-      0.9
+    const meltStrength = clamp(
+      mergeAmp * (0.35 + melt * 0.75) * (1 - strand * 0.65),
+      0,
+      MERGE_CAP
     );
 
-    // Magnetic bridges: several soft strands that thicken as they melt
-    const bridges = 3;
-    for (let bi = 0; bi < bridges; bi++) {
-      const by =
-        baseY +
-        (bi - 1) * Math.min(b.m.h, b.s.h) * (0.1 + melt * 0.06) +
-        Math.sin(time * 1.4 + bi) * 2.5 * scale;
-      const lobes = 6 + Math.round(meltStrength * 3);
-      for (let i = 0; i < lobes; i++) {
-        const u = i / (lobes - 1 || 1);
-        const x0 = lerp(mRight, sLeft, u);
-        const bend = u * (1 - u) * 4;
-        const wave =
-          Math.sin(time * 2.1 + u * Math.PI * 2 + bi) *
-            (3 + meltStrength * 7) *
-            scale *
-            (1 - strand * 0.45) +
-          Math.sin(time * 3.2 + u * 4 + bi * 0.7) * 1.5 * scale;
-        const pullY = mouse.active ? (smooth.y - by) * bend * (0.14 + prox * 0.1) : 0;
-        const pullX = mouse.active ? (smooth.x - x0) * bend * (0.07 + prox * 0.06) : 0;
-        // Radius peaks at mid when melting; stays thin at ends so letters stay letter-shaped
-        const mid = Math.sin(u * Math.PI);
-        const r =
-          plump *
-          (0.22 + mid * (0.55 + meltStrength * 0.55)) *
-          (0.55 + meltStrength * 0.5) *
-          (1 - strand * 0.5) *
-          (0.88 + 0.12 * Math.sin(time * 2.4 + i + bi));
-        // When far apart / low melt, almost no mid bridge — clear dual contours
-        if (r < 2.2 * scale && meltStrength < 0.35 && mid > 0.25) continue;
-        blob(x0 + pullX, by + wave * mid + pullY, Math.max(2.2 * scale, r), 0.92);
-      }
+    // Whole-body magnetic auras — attraction from the full letter mass
+    softEllipse(mCx, mCy, b.m.w * 0.48, b.m.h * 0.52, 0.55 + meltStrength * 0.2);
+    softEllipse(sCx, sCy, b.s.w * 0.46, b.s.h * 0.52, 0.55 + meltStrength * 0.2);
+    // Facing halves stretch toward each other as continuous bodies
+    const bodyReach = gap * (0.12 + meltStrength * 0.38);
+    softEllipse(
+      mCx + b.m.w * 0.18 + bodyReach * 0.35,
+      mCy + letterH * 0.06,
+      b.m.w * (0.38 + meltStrength * 0.22) + bodyReach * 0.25,
+      b.m.h * (0.42 + meltStrength * 0.08),
+      0.75 + meltStrength * 0.2
+    );
+    softEllipse(
+      sCx - b.s.w * 0.18 - bodyReach * 0.35,
+      sCy + letterH * 0.04,
+      b.s.w * (0.36 + meltStrength * 0.22) + bodyReach * 0.25,
+      b.s.h * (0.42 + meltStrength * 0.08),
+      0.75 + meltStrength * 0.2
+    );
+
+    // Continuous melt bridges (capsules) — not dotted point chains
+    const bendY = mouse.active
+      ? (smooth.y - baseY) * 0.1 * (0.5 + meltStrength * 0.5)
+      : Math.sin(time * 1.3) * 3 * scale;
+    const bridgeW = (6 + meltStrength * 28) * scale * (1 - strand * 0.45);
+    const yBands = [
+      baseY - letterH * 0.16,
+      baseY,
+      baseY + letterH * 0.14,
+    ];
+    for (let bi = 0; bi < yBands.length; bi++) {
+      const by = yBands[bi] + bendY * (bi === 1 ? 1 : 0.45);
+      const wMul = bi === 1 ? 1 : 0.62 + meltStrength * 0.2;
+      // Skip side bands when far / low melt — keeps dual contours clear
+      if (bi !== 1 && meltStrength < 0.28 && strand > 0.55) continue;
+      softCapsule(
+        mRight - 4 * scale,
+        by + Math.sin(time * 1.7 + bi) * 2 * scale,
+        sLeft + 4 * scale,
+        by + Math.cos(time * 1.6 + bi) * 2 * scale,
+        bridgeW * wMul,
+        0.55 + meltStrength * 0.4
+      );
     }
 
-    // Anchor beads on each letter's facing edge (two fluids, not one puddle)
-    blob(mRight - 2 * scale, baseY, plump * (0.7 + meltStrength * 0.25), 1);
-    blob(sLeft + 2 * scale, baseY, plump * (0.75 + meltStrength * 0.25), 1);
+    // Soft mid mass when strongly melting — one continuous pool, not a cursor blot
+    if (meltStrength > 0.45 && strand < 0.55) {
+      softEllipse(
+        lerp(mRight, sLeft, 0.5) + Math.sin(time * 1.5) * 3 * scale,
+        baseY + bendY * 0.5,
+        gap * (0.28 + meltStrength * 0.22) + bridgeW,
+        bridgeW * (1.1 + meltStrength * 0.5),
+        0.7 + meltStrength * 0.25
+      );
+    }
 
-    // Light blur only — fluid merge without mushy letter edges
-    const blurPx = Math.max(2.2, 5.2 * scale);
+    // Extra blur pass — smooths capsules/ellipses, kills pixel noise
+    const blurPx = Math.max(3.8, 8.2 * scale);
     fctx.filter = `blur(${blurPx.toFixed(2)}px)`;
     fctx.drawImage(field, 0, 0);
     fctx.filter = "none";
