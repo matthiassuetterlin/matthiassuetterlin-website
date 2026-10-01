@@ -1,7 +1,7 @@
 (() => {
   /**
    * Solid Playfair M/S: clear forms + fluid merge, full-page mouse.
-   * Perf: capped field + soft threshold; sharp glyphs stamped at full res.
+   * Max merge capped — readable MS snake, no black blob at the cursor.
    */
   const stage = document.getElementById("ms-stage");
   const canvas = document.getElementById("ms-canvas");
@@ -217,15 +217,21 @@
     const nearR = Math.min(b.m.h, b.s.h) * 1.35;
     const proxM = mouse.active ? clamp(1 - dM / nearR, 0, 1) : 0;
     const proxS = mouse.active ? clamp(1 - dS / nearR, 0, 1) : 0;
-    const prox = Math.max(proxM, proxS, inward * 0.85);
+    // Soft proximity — never strong enough to collapse into one cursor blob
+    const prox = Math.max(proxM, proxS, inward * 0.65) * 0.72;
 
-    // Stronger pull-together / push-apart
+    // Pull-together capped so both letters stay distinct (MS snake, not one mass)
+    const MERGE_CAP = 1.05;
     const together = mouse.active
-      ? lerp(52, -58, clamp(outward, 0, 1))
+      ? lerp(34, -52, clamp(outward, 0, 1))
       : 12 + Math.sin(time * 0.7) * 5;
     const attractMerge = mouse.active
-      ? lerp(1.85, 0.12, clamp(outward / 1.05, 0, 1)) * (0.55 + prox * 0.7)
-      : 0.55 + 0.22 * Math.sin(time * 0.65);
+      ? clamp(
+          lerp(1.15, 0.18, clamp(outward / 1.05, 0, 1)) * (0.7 + prox * 0.35),
+          0.15,
+          MERGE_CAP
+        )
+      : 0.55 + 0.18 * Math.sin(time * 0.65);
 
     const leanAmt = 0.12 + prox * 0.18;
     const leanM = mouse.active ? ((smooth.x - b.m.cx) / scale) * leanAmt * (0.55 + outward * 0.5 + proxM) : 0;
@@ -250,27 +256,36 @@
     );
 
     const mergeTarget = attractMerge;
-    mergeVel = (mergeVel + (mergeTarget - mergeAmp) * 0.16) * 0.86;
-    mergeAmp += mergeVel;
+    mergeVel = (mergeVel + (mergeTarget - mergeAmp) * 0.14) * 0.88;
+    mergeAmp = clamp(mergeAmp + mergeVel, 0.12, MERGE_CAP);
 
     // Letter-form distortion toward the cursor (skew / stretch / squash)
     function aimDeform(def, cx, cy, proxLetter) {
       const dx = mouse.active ? (smooth.x - cx) / scale : 0;
       const dy = mouse.active ? (smooth.y - cy) / scale : 0;
-      const pull = proxLetter * proxLetter;
-      const tSx = 1 + pull * clamp(dx / 140, -0.42, 0.42) + inward * 0.08 * (mouse.active ? 1 : 0);
-      const tSy = 1 + pull * clamp(dy / 160, -0.38, 0.38) - prox * 0.12 * pull;
-      const tSkew = pull * clamp(dx / 90, -0.55, 0.55);
-      const tPullX = pull * clamp(dx * 0.22, -36, 36);
-      const tPullY = pull * clamp(dy * 0.2, -30, 30);
-      def.sx = lerp(def.sx, tSx, 0.18);
-      def.sy = lerp(def.sy, clamp(tSy, 0.72, 1.38), 0.18);
-      def.skew = lerp(def.skew, tSkew, 0.18);
-      def.pullX = lerp(def.pullX, tPullX, 0.18);
-      def.pullY = lerp(def.pullY, tPullY, 0.18);
+      const pull = proxLetter * proxLetter * 0.75;
+      const tSx = 1 + pull * clamp(dx / 180, -0.28, 0.28) + inward * 0.04 * (mouse.active ? 1 : 0);
+      const tSy = 1 + pull * clamp(dy / 200, -0.24, 0.24) - prox * 0.06 * pull;
+      const tSkew = pull * clamp(dx / 120, -0.32, 0.32);
+      const tPullX = pull * clamp(dx * 0.12, -18, 18);
+      const tPullY = pull * clamp(dy * 0.1, -14, 14);
+      def.sx = lerp(def.sx, tSx, 0.16);
+      def.sy = lerp(def.sy, clamp(tSy, 0.82, 1.22), 0.16);
+      def.skew = lerp(def.skew, tSkew, 0.16);
+      def.pullX = lerp(def.pullX, tPullX, 0.16);
+      def.pullY = lerp(def.pullY, tPullY, 0.16);
     }
     aimDeform(deformM, b.m.cx, b.m.cy, Math.max(proxM, inward * 0.55));
     aimDeform(deformS, b.s.cx, b.s.cy, Math.max(proxS, inward * 0.55));
+
+    // Keep a readable gap between glyph centers (never fully fused)
+    const minSep = Math.max(b.m.w, b.s.w) / scale * 0.42;
+    const gapX = (b.s.cx - b.m.cx) / scale + (posS.x + deformS.pullX) - (posM.x + deformM.pullX);
+    if (gapX < minSep) {
+      const fix = (minSep - gapX) * 0.5;
+      posM.x -= fix;
+      posS.x += fix;
+    }
 
     letterM.style.transform =
       `translate(${(posM.x + deformM.pullX).toFixed(2)}px, ${(posM.y + deformM.pullY).toFixed(2)}px) ` +
@@ -299,7 +314,7 @@
     const baseY = (mCy + sCy) * 0.5 + Math.min(b.m.h, b.s.h) * 0.16;
     const gap = Math.max(4, sLeft - mRight);
 
-    const plump = (10 + mergeAmp * 48) * scale * (0.9 + prox * 0.45);
+    const plump = (9 + mergeAmp * 28) * scale * (0.95 + prox * 0.15);
     const strand = clamp(gap / (90 * scale), 0, 1);
     // Fewer lobes when stretched thin — cheaper, still reads as fluid
     const lobes = 7 + Math.round(strand * 4);
@@ -310,11 +325,13 @@
         Math.sin(time * 2.0 + u * Math.PI * 2) * (4 + mergeAmp * 8) * scale * (1 - strand * 0.5) +
         Math.sin(time * 3.1 + u * 5) * 2 * scale * (1 - strand * 0.4);
       const x0 = lerp(mRight, sLeft, u);
+      // Mild snake bend toward cursor — mid-lobe only, never a point mass
+      const bend = u * (1 - u) * 4; // peaks at bridge center
       const pullY = mouse.active
-        ? (smooth.y - baseY) * u * (1 - u) * (0.75 + prox * 0.9) * Math.max(outward, prox * 0.8)
+        ? (smooth.y - baseY) * bend * (0.22 + prox * 0.18)
         : 0;
       const pullX = mouse.active
-        ? (smooth.x - x0) * u * (1 - u) * (0.35 + prox * 0.55)
+        ? (smooth.x - x0) * bend * (0.12 + prox * 0.1)
         : 0;
       const x = x0 + pullX;
       const y = baseY + wave * Math.sin(u * Math.PI) + pullY;
@@ -328,22 +345,23 @@
 
     blob(mRight - scale, baseY + Math.sin(time * 2) * 3 * scale, plump * (0.85 - strand * 0.2), 1);
     blob(sLeft + scale, baseY + Math.cos(time * 2.1) * 3 * scale, plump * (0.9 - strand * 0.2), 1);
+    // Bridge heart stays on the MS axis — slight bend, no cursor ink blot
     blob(
-      lerp(mRight, sLeft, 0.5) + Math.sin(time * 1.6) * (4 - strand * 2) * scale + (mouse.active ? (smooth.x - midX) * 0.2 * prox : 0),
-      baseY - 3 * scale + (mouse.active ? (smooth.y - baseY) * (0.18 + prox * 0.35) : 0),
-      plump * (1.0 - strand * 0.35) * (0.95 + inward * 0.35 + prox * 0.4),
-      1
+      lerp(mRight, sLeft, 0.5) + Math.sin(time * 1.6) * (4 - strand * 2) * scale + (mouse.active ? (smooth.x - midX) * 0.06 * prox : 0),
+      baseY - 3 * scale + (mouse.active ? (smooth.y - baseY) * (0.06 + prox * 0.08) : 0),
+      plump * (0.85 - strand * 0.3) * (0.9 + inward * 0.2),
+      0.95
     );
 
-    if (mergeAmp > 0.7 && strand < 0.45) {
+    if (mergeAmp > 0.75 && strand < 0.4) {
       const yMid = (mCy + sCy) * 0.5;
-      for (let i = 0; i < 4; i++) {
-        const u = i / 3;
+      for (let i = 0; i < 3; i++) {
+        const u = i / 2;
         blob(
           lerp(mRight, sLeft, u),
-          yMid + Math.sin(time * 2 + u * 5) * 6 * mergeAmp * scale,
-          plump * 0.25 * mergeAmp,
-          0.7
+          yMid + Math.sin(time * 2 + u * 5) * 4 * mergeAmp * scale,
+          plump * 0.18 * mergeAmp,
+          0.55
         );
       }
     }
