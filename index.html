@@ -8,39 +8,36 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="site-header">
-    <div class="wrap nav">
-      <a class="logo" href="#top">Matthias Sütterlin</a>
-      <nav aria-label="Hauptnavigation">
-        <ul>
-          <li><a href="#about">Über mich</a></li>
-          <li><a href="#projects">Projekte</a></li>
-          <li><a href="#contact">Kontakt</a></li>
-        </ul>
-      </nav>
-    </div>
-  </header>
+  <div class="container">
+    <div class="col-text">
 
-  <main id="top">
-    <section class="hero">
-      <div class="wrap hero-inner">
-        <p class="eyebrow">Dipl.-Ing. (FH) Innenarchitekt</p>
-        <h1>Räume, die Marken<br />erfahrbar machen.</h1>
-        <p class="lead">
-          Design Director und Associate Partner bei VAVE —
-          räumliche Markenerlebnisse für Markenauftritte, Handel, Veranstaltungen
-          und Arbeitswelten im Raum Frankfurt / Offenbach.
-        </p>
-        <p class="hero-meta">Quellenstraße 3 · 79241 Ihringen</p>
+      <div class="intro" id="top">
+        <header>
+          <h1>Matthias Sütterlin</h1>
+          <p>
+            Dipl.-Ing. (FH) Innenarchitekt<br />
+            Design Director und Associate Partner, VAVE<br />
+            Quellenstraße 3<br />
+            79241 Ihringen<br />
+            <a class="u" href="mailto:info@matthiassuetterlin.de">info@matthiassuetterlin.de</a>
+          </p>
+        </header>
       </div>
-    </section>
 
-    <section id="about" class="section">
-      <div class="wrap split">
-        <div>
+      <nav class="jump" aria-label="Sprungmarken">
+        <a href="#about">↓ Über mich</a><br />
+        <a href="#projects">↓ Projekte</a><br />
+        <a href="#contact">↓ Kontakt</a>
+      </nav>
+
+      <main>
+        <section id="about">
           <h2>Über mich</h2>
-        </div>
-        <div class="prose">
+          <p>
+            Räume, die Marken erfahrbar machen. Räumliche Markenerlebnisse für
+            Markenauftritte, Handel, Veranstaltungen und Arbeitswelten im Raum
+            Frankfurt / Offenbach.
+          </p>
           <p>
             Ich gestalte räumliche Markenerlebnisse: von Messen und Handelsflächen
             über Büros bis zu Markenwelten. Ausgangspunkt ist oft eine visuelle
@@ -53,86 +50,76 @@
             Design Director und Associate Partner.
           </p>
           <ul class="facts">
-            <li><span>Rolle</span> Design Director und Associate Partner, VAVE</li>
-            <li><span>Fokus</span> Räumliche Markenerlebnisse · Handels- und Markenräume · Messen und Events</li>
-            <li><span>Standort</span> Frankfurt / Offenbach · Ihringen</li>
+            <li>Rolle — Design Director und Associate Partner, VAVE</li>
+            <li>Fokus — Räumliche Markenerlebnisse · Handels- und Markenräume · Messen und Events</li>
+            <li>Standort — Frankfurt / Offenbach · Ihringen</li>
           </ul>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <section id="projects" class="section section-alt">
-      <div class="wrap">
-        <div class="section-head">
+        <nav class="jump" aria-label="Navigation Projekte">
+          <a href="#top">↑ Intro</a><br />
+          <a href="#projects">↓ Projekte</a><br />
+          <a href="#contact">↓ Kontakt</a>
+        </nav>
+
+        <section id="projects">
           <h2>Projekte</h2>
           <p>Auswahl — Platzhalter für den weiteren Portfolio-Ausbau.</p>
-        </div>
-        <div class="project-grid">
-          <article class="project">
-            <p class="project-year">2012</p>
-            <h3>ferner.Welten — Zentrum für Glaziologie</h3>
-            <p>
+          <ul class="projects">
+            <li>
+              <span class="title">ferner.Welten — Zentrum für Glaziologie</span>, 2012.
               Diplomprojekt: Forschungs- und Erlebniszentrum am Rhônegletscher
               (Wallis, Schweiz). Architektur als Plattform für Glaziologie,
               Bildung und Klimabewusstsein — international unter anderem bei eVolo
               vorgestellt.
-            </p>
-            <p class="project-tag">Diplomarbeit · Rhônegletscher</p>
-          </article>
-          <article class="project">
-            <p class="project-year">2014</p>
-            <h3>ADAC Mittelrhein — Büroflächen Koblenz</h3>
-            <p>
+              <span class="meta">Diplomarbeit · Rhônegletscher</span>
+            </li>
+            <li>
+              <span class="title">ADAC Mittelrhein — Büroflächen Koblenz</span>, 2014.
               Bürokonzept über zwei Geschosse (etwa 1.320&nbsp;m²) für den ADAC
               Mittelrhein. Dynamische Linien aus dem Thema Mobilität —
               Mitarbeit bei innen_architekten BALS+WIRTH.
-            </p>
-            <p class="project-tag">Arbeitswelt · BALS+WIRTH</p>
-          </article>
-          <article class="project">
-            <p class="project-year">2023–24</p>
-            <h3>DreamCo — Imagining your dreams</h3>
-            <p>
+              <span class="meta">Arbeitswelt · BALS+WIRTH</span>
+            </li>
+            <li>
+              <span class="title">DreamCo — Imagining your dreams</span>, 2023–24.
               Interaktive KI-Installation (Design Shanghai): Traumbeschreibungen
               und Selfies werden zu persönlichen Bildern. Art Direction bei VAVE;
               unter anderem ADCE Bronze.
-            </p>
-            <p class="project-tag">Installation · VAVE · KI</p>
-          </article>
-        </div>
-      </div>
-    </section>
+              <span class="meta">Installation · VAVE · KI</span>
+            </li>
+          </ul>
+        </section>
 
-    <section id="contact" class="section">
-      <div class="wrap split">
-        <div>
+        <nav class="jump" aria-label="Navigation Kontakt">
+          <a href="#about">↑ Über mich</a><br />
+          <a href="#projects">↑ Projekte</a><br />
+          <a href="#contact">↓ Kontakt</a>
+        </nav>
+
+        <section id="contact">
           <h2>Kontakt</h2>
-        </div>
-        <div class="prose">
           <p>
             Anfragen zu Projekten, Kollaborationen oder Vorträgen gerne per E-Mail.
           </p>
-          <p class="contact-lines">
-            <a href="mailto:info@matthiassuetterlin.de">info@matthiassuetterlin.de</a><br />
+          <p>
+            <a class="u" href="mailto:info@matthiassuetterlin.de">info@matthiassuetterlin.de</a><br />
             Quellenstraße 3<br />
             79241 Ihringen
           </p>
-          <p class="muted">
+          <p>
             Bestehende Domain:
-            <a href="https://www.matthiassuetterlin.de/">matthiassuetterlin.de</a>
+            <a class="u" href="https://www.matthiassuetterlin.de/">matthiassuetterlin.de</a>
             — dieses Repository ist der Ausgangspunkt für den Ausbau.
           </p>
-        </div>
-      </div>
-    </section>
-  </main>
+        </section>
+      </main>
 
-  <footer class="site-footer">
-    <div class="wrap footer-inner">
-      <span>© <span id="y"></span> Matthias Sütterlin</span>
-      <span class="muted">Innenarchitekt · VAVE</span>
+      <footer class="site-end">
+        © <span id="y"></span> Matthias Sütterlin
+      </footer>
     </div>
-  </footer>
+  </div>
   <script>document.getElementById("y").textContent = new Date().getFullYear();</script>
 </body>
 </html>
