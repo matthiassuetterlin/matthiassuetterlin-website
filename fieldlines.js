@@ -1,8 +1,8 @@
 (() => {
   /**
-   * Solid Playfair M/S (6e737bc spirit): clear letter forms + fluid merge.
-   * Mouse outward → letters stretch apart and pull fluid with them.
-   * Mouse inward → stronger merge. Centered via CSS. Hi-res soft edges.
+   * Solid Playfair M/S: clear letter forms + fluid merge.
+   * Full-viewport canvas — no letter-box edge; mouse is site-wide.
+   * Outward → stretch apart; inward → stronger merge.
    */
   const stage = document.getElementById("ms-stage");
   const canvas = document.getElementById("ms-canvas");
@@ -42,7 +42,8 @@
   }
 
   function layout() {
-    const sr = stage.getBoundingClientRect();
+    // Full viewport — morph paints anywhere, not clipped to the letter box
+    const sr = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const nw = Math.max(2, Math.round(sr.width));
     const nh = Math.max(2, Math.round(sr.height));
@@ -131,7 +132,7 @@
 
     // Outwardness: how far mouse is from the MS mid — drives stretch-apart
     const dist = Math.hypot(smooth.x - midX, smooth.y - midY);
-    const reach = Math.min(w, h) * 0.42;
+    const reach = Math.min(w, h) * 0.55;
     const outward = mouse.active ? clamp(dist / reach, 0, 1.35) : 0.15;
     const inward = mouse.active ? clamp(1 - dist / (reach * 0.55), 0, 1) : 0.55;
 
@@ -294,6 +295,13 @@
   );
   document.addEventListener(
     "pointerleave",
+    () => {
+      mouse.active = false;
+    },
+    { passive: true }
+  );
+  window.addEventListener(
+    "blur",
     () => {
       mouse.active = false;
     },
