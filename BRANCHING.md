@@ -4,8 +4,11 @@
 
 ## Reference
 
-- Current default: commit `05a8cd0` (solid MS, centered, outward stretch).
-- Tag: `reference/solid-ms-fluid` / `v1-solid-ms`
+- **Current default / v2:** commit `838faa7` — capped max-merge, readable MS snake, no cursor blot.
+  - Tags: `v2-max-merge` / `reference/max-merge-snake`
+  - Branch pin: `reference/v2-max-merge`
+- **v1:** commit `05a8cd0` (solid MS, centered, outward stretch).
+  - Tags: `reference/solid-ms-fluid` / `v1-solid-ms`
 - Previous wild-thread main kept as: `archive/wild-thread-ms`
 
 ## How to work
