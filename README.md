@@ -1,18 +1,18 @@
 # matthiassuetterlin-website
 
-Scaffold für die persönliche Website von **Matthias Sütterlin**
-(Dipl.-Ing. (FH) Innenarchitekt · Design Director & Associate Partner, VAVE).
+Ausgangspunkt für die persönliche Website von **Matthias Sütterlin**
+(Dipl.-Ing. (FH) Innenarchitekt · Design Director und Associate Partner, VAVE).
 
 Domain: [https://www.matthiassuetterlin.de/](https://www.matthiassuetterlin.de/)
 
 ## Inhalt
 
-- `index.html` — Startseite mit Intro, Über mich, Projekte, Kontakt
-- `styles.css` — zurückhaltendes Layout (Typo, Weißraum)
+- `index.html` — Startseite mit Intro, Über mich, Projekte, Kontakt (deutsch)
+- `styles.css` — zurückhaltendes Layout (Typografie, Weißraum)
 
-Projekt-Platzhalter: *ferner.Welten / Center for Glaciology*, ADAC Mittelrhein Koblenz, DreamCo.
+Projekt-Platzhalter: *ferner.Welten / Zentrum für Glaziologie*, ADAC Mittelrhein Koblenz, DreamCo.
 
-## Lokal
+## Lokal ansehen
 
 `index.html` im Browser öffnen oder:
 
