@@ -2,13 +2,16 @@
   /**
    * Liquid poured into Playfair M / S molds (top-down).
    * Shape memory + contour liquefaction + magnetic MS link + point attraction.
+   *
+   * Important: never block seeding on document.fonts.load — under file:// that
+   * promise often never resolves, which left the canvas blank.
    */
   const stage = document.getElementById("ms-stage");
   const canvas = document.getElementById("ms-canvas");
   const letterM = document.getElementById("letter-m");
   const letterS = document.getElementById("letter-s");
   const home = document.getElementById("view-home");
-  if (!stage || !canvas || !letterM || !letterS) return;
+  if (!stage || !canvas || !letterM || !letterS || !home) return;
 
   const ctx = canvas.getContext("2d", { alpha: true });
   const mask = document.createElement("canvas");
@@ -16,14 +19,16 @@
 
   let particles = [];
   let mouse = { x: 0, y: 0, active: false };
-  let fontReady = false;
   let seeded = false;
   let lastW = 0;
   let lastH = 0;
-  let links = []; // magnetic pairs (i, j)
+  let links = [];
+  let seedAttempts = 0;
 
   const CELL = 28;
   let grid = new Map();
+  const FONT =
+    '700 1px "Playfair Display", "Times New Roman", Times, Georgia, serif';
 
   function key(cx, cy) {
     return cx + "," + cy;
@@ -69,16 +74,6 @@
     return out;
   }
 
-  function waitFonts() {
-    if (document.fonts && document.fonts.load) {
-      return document.fonts.load('700 200px "Playfair Display"').then(() => {
-        fontReady = true;
-      });
-    }
-    fontReady = true;
-    return Promise.resolve();
-  }
-
   function layoutSize() {
     const sr = stage.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -104,8 +99,8 @@
     mctx.fillStyle = "#000";
     mctx.textAlign = "center";
     mctx.textBaseline = "middle";
-    const fs = rect.height * 1.02;
-    mctx.font = `700 ${fs}px "Playfair Display", "Times New Roman", Times, serif`;
+    const fs = Math.max(12, rect.height * 1.02);
+    mctx.font = FONT.replace("1px", fs + "px");
     mctx.fillText(ch, bw / 2, bh / 2 + fs * 0.03);
 
     const img = mctx.getImageData(0, 0, bw, bh).data;
@@ -114,12 +109,10 @@
     const oy = rect.top - sr.top - pad;
     const out = [];
 
-    // Edge distance approx: interior vs contour (for liquefaction)
     for (let y = 0; y < bh; y += step) {
       for (let x = 0; x < bw; x += step) {
         const a = img[(y * bw + x) * 4 + 3];
         if (a < 128) continue;
-        // sample neighborhood for edge factor
         let edge = 0;
         const probes = [
           [step, 0],
@@ -136,7 +129,7 @@
           }
           if (img[(py * bw + px) * 4 + 3] < 128) edge += 1;
         }
-        const contour = edge / 4; // 0 interior … 1 contour
+        const contour = edge / 4;
         out.push({
           x: ox + x,
           y: oy + y,
@@ -153,17 +146,7 @@
     return out;
   }
 
-  function seed() {
-    const { sr, w, h } = layoutSize();
-    const mRect = letterM.getBoundingClientRect();
-    const sRect = letterS.getBoundingClientRect();
-    if (mRect.width < 8 || sRect.width < 8) return false;
-
-    const mParts = sampleLetter("M", mRect, sr, 0);
-    const sParts = sampleLetter("S", sRect, sr, 1);
-    particles = mParts.concat(sParts);
-
-    // Magnetic links: nearest opposite-group particles across the gap
+  function buildLinks() {
     links = [];
     const mOnly = [];
     const sOnly = [];
@@ -171,14 +154,14 @@
       if (particles[i].group === 0) mOnly.push(i);
       else sOnly.push(i);
     }
-    // Link a subset along facing edges (highest x for M, lowest x for S)
+    if (!mOnly.length || !sOnly.length) return;
     mOnly.sort((a, b) => particles[b].rx - particles[a].rx);
     sOnly.sort((a, b) => particles[a].rx - particles[b].rx);
     const linkCount = Math.min(48, mOnly.length, sOnly.length);
     const mFace = mOnly.slice(0, Math.min(120, mOnly.length));
     const sFace = sOnly.slice(0, Math.min(120, sOnly.length));
     for (let n = 0; n < linkCount; n++) {
-      const mi = mFace[(n / linkCount) * (mFace.length - 1) | 0];
+      const mi = mFace[((n / linkCount) * (mFace.length - 1)) | 0];
       let best = sFace[0];
       let bestD = Infinity;
       const py = particles[mi].ry;
@@ -194,19 +177,60 @@
       }
       links.push([mi, best]);
     }
+  }
 
+  function seed() {
+    seedAttempts += 1;
+    const { sr, w, h } = layoutSize();
+    // Force layout — transparent glyphs still occupy space via font metrics
+    const mRect = letterM.getBoundingClientRect();
+    const sRect = letterS.getBoundingClientRect();
+    if (mRect.width < 4 || sRect.width < 4 || w < 8 || h < 8) {
+      seeded = false;
+      return false;
+    }
+
+    const mParts = sampleLetter("M", mRect, sr, 0);
+    const sParts = sampleLetter("S", sRect, sr, 1);
+    particles = mParts.concat(sParts);
+    if (particles.length < 20) {
+      // Sampling failed (font not drawn yet) — retry soon
+      seeded = false;
+      return false;
+    }
+
+    buildLinks();
     lastW = w;
     lastH = h;
     seeded = true;
     return true;
   }
 
+  function paintFallbackGlyphs(sr) {
+    const mRect = letterM.getBoundingClientRect();
+    const sRect = letterS.getBoundingClientRect();
+    ctx.fillStyle = "#000";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const draw = (ch, rect) => {
+      const fs = Math.max(12, rect.height * 1.02);
+      ctx.font = FONT.replace("1px", fs + "px");
+      ctx.fillText(
+        ch,
+        rect.left - sr.left + rect.width / 2,
+        rect.top - sr.top + rect.height / 2 + fs * 0.03
+      );
+    };
+    draw("M", mRect);
+    draw("S", sRect);
+  }
+
   function step() {
     const { sr, w, h } = layoutSize();
     if (!seeded || Math.abs(w - lastW) > 2 || Math.abs(h - lastH) > 2) {
-      if (fontReady) seed();
-      if (!seeded) return;
+      seed();
     }
+    if (!seeded) return;
 
     const mx = mouse.active ? mouse.x - sr.left : -9999;
     const my = mouse.active ? mouse.y - sr.top : -9999;
@@ -215,18 +239,15 @@
 
     rebuildGrid();
 
-    // Forces
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i];
       let fx = 0;
       let fy = 0;
 
-      // Shape memory (stronger in core, weaker at contour → liquefies at edges)
       const memory = 0.045 + (1 - p.contour) * 0.09;
       fx += (p.rx - p.x) * memory;
       fy += (p.ry - p.y) * memory;
 
-      // Viscosity / cohesion with same-group neighbors
       const near = neighbors(i, 26);
       for (let n = 0; n < near.length; n++) {
         const { j, dx, dy, d2 } = near[n];
@@ -238,20 +259,17 @@
           const str = 0.08;
           fx += (dx / d) * diff * str;
           fy += (dy / d) * diff * str;
-          // damp relative velocity
           fx += (q.vx - p.vx) * 0.02;
           fy += (q.vy - p.vy) * 0.02;
         }
       }
 
-      // Point attraction exactly under cursor
       if (mouse.active) {
         const dx = mx - p.x;
         const dy = my - p.y;
         const d2 = dx * dx + dy * dy;
         if (d2 < attractR2 && d2 > 0.5) {
           const d = Math.sqrt(d2);
-          // Falloff peaked at cursor — stronger for contour liquid
           const fall = 1 - d / attractR;
           const power = (0.55 + p.contour * 0.85) * fall * fall;
           fx += (dx / d) * power * 14;
@@ -263,7 +281,6 @@
       p.vy = (p.vy + fy) * 0.84;
     }
 
-    // Magnetic coupling between M and S
     for (let n = 0; n < links.length; n++) {
       const ia = links[n][0];
       const ib = links[n][1];
@@ -280,7 +297,6 @@
       a.vy += fy;
       b.vx -= fx;
       b.vy -= fy;
-      // Extra tug when mouse is near the bridge
       if (mouse.active) {
         const midX = (a.x + b.x) * 0.5;
         const midY = (a.y + b.y) * 0.5;
@@ -306,10 +322,14 @@
   }
 
   function paint() {
-    const { w, h } = layoutSize();
+    const { sr, w, h } = layoutSize();
     ctx.clearRect(0, 0, w, h);
 
-    // Magnetic bridges as flat black liquid fillets
+    if (!seeded || particles.length < 20) {
+      paintFallbackGlyphs(sr);
+      return;
+    }
+
     ctx.fillStyle = "#000";
     ctx.strokeStyle = "#000";
     ctx.lineCap = "round";
@@ -326,12 +346,11 @@
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       const mx = (a.x + b.x) * 0.5;
-      const my = (a.y + b.y) * 0.5 + Math.sin(n + a.x * 0.01) * 2;
+      const my = (a.y + b.y) * 0.5;
       ctx.quadraticCurveTo(mx, my, b.x, b.y);
       ctx.stroke();
     }
 
-    // Liquid body — overlapping discs read as continuous pour from above
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i];
       const rad = p.r * (1.05 + p.contour * 0.15);
@@ -343,14 +362,19 @@
 
   function frame() {
     requestAnimationFrame(frame);
-    if (!home.classList.contains("is-active")) return;
+    if (!home.classList.contains("is-active") || home.hidden) return;
     step();
-    if (seeded) paint();
+    paint();
   }
 
-  windowFonts().then(() => {
-    seed();
-  });
+  // Kick fonts but never wait on them
+  if (document.fonts && document.fonts.load) {
+    document.fonts.load('700 200px "Playfair Display"').catch(() => {});
+    document.fonts.ready.then(() => {
+      seeded = false;
+      seed();
+    }).catch(() => {});
+  }
 
   window.addEventListener(
     "pointermove",
@@ -362,15 +386,32 @@
     { passive: true }
   );
   window.addEventListener(
+    "pointerdown",
+    (e) => {
+      mouse.active = true;
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+    },
+    { passive: true }
+  );
+  document.addEventListener(
     "pointerleave",
     () => {
       mouse.active = false;
     },
     { passive: true }
   );
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) seeded = false;
+
+  window.addEventListener("resize", () => {
+    seeded = false;
   });
+
+  // Retry seeding a few times while layout/fonts settle
+  let tries = 0;
+  const boot = setInterval(() => {
+    tries += 1;
+    if (seed() || tries > 40) clearInterval(boot);
+  }, 100);
 
   requestAnimationFrame(frame);
 })();

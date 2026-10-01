@@ -148,6 +148,8 @@ a {
 }
 .mega .letter {
   display: block;
+  min-width: 0.55em;
+  min-height: 0.82em;
   line-height: 0.82;
   font-family: inherit;
   font-weight: inherit; /* keep Playfair 700 — do not lighten */
