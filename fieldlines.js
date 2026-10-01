@@ -1,7 +1,7 @@
 (() => {
   /**
    * Solid Playfair M/S: clear forms + fluid merge, full-page mouse.
-   * Perf: low-res field + soft threshold + upscale (target ~60fps).
+   * Perf: capped field + soft threshold; sharp glyphs stamped at full res.
    */
   const stage = document.getElementById("ms-stage");
   const canvas = document.getElementById("ms-canvas");
@@ -31,7 +31,7 @@
   let boxAge = 0;
 
   // Cap internal sim resolution — biggest FPS win vs full-viewport × SS
-  const MAX_EDGE = 900;
+  const MAX_EDGE = 1120;
 
   const FONT =
     '700 1px "Playfair Display", "Times New Roman", Times, Georgia, serif';
@@ -118,11 +118,21 @@
     fctx.fillText(ch, cx, cy + fs * 0.03);
   }
 
+  // Full-resolution black glyphs — crisp contour on top of soft fluid
+  function drawSharpGlyph(ch, cx, cy, boxH) {
+    const fs = Math.max(12, boxH * 1.02);
+    ctx.fillStyle = "#000";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = FONT.replace("1px", fs + "px");
+    ctx.fillText(ch, cx, cy + fs * 0.03);
+  }
+
   function blob(x, y, r, a) {
     if (r < 0.5) return;
     const g = fctx.createRadialGradient(x, y, 0, x, y, r);
     g.addColorStop(0, `rgba(255,255,255,${a})`);
-    g.addColorStop(0.55, `rgba(255,255,255,${a * 0.5})`);
+    g.addColorStop(0.4, `rgba(255,255,255,${a * 0.65})`);
     g.addColorStop(1, "rgba(255,255,255,0)");
     fctx.fillStyle = g;
     fctx.beginPath();
@@ -133,8 +143,9 @@
   function softThreshold() {
     const img = fctx.getImageData(0, 0, iw, ih);
     const d = img.data;
-    const lo = 110;
-    const hi = 175;
+    // Narrow ramp → cleaner contour, still slightly soft for fluid
+    const lo = 148;
+    const hi = 168;
     const inv = 1 / (hi - lo);
     for (let i = 0; i < d.length; i += 4) {
       const v = d[i];
@@ -274,9 +285,9 @@
       }
     }
 
-    // Blur at low-res (cheap) ≈ stronger blur when upscaled
-    const blurPx = Math.max(4, 12 * scale);
-    fctx.filter = `blur(${blurPx}px)`;
+    // Light blur only — fluid merge without mushy letter edges
+    const blurPx = Math.max(2.2, 5.2 * scale);
+    fctx.filter = `blur(${blurPx.toFixed(2)}px)`;
     fctx.drawImage(field, 0, 0);
     fctx.filter = "none";
 
@@ -286,6 +297,14 @@
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(field, 0, 0, cssW, cssH);
+
+    // Stamp crisp Playfair on top (display resolution)
+    const mCxCss = b.m.cx / scale + posM.x;
+    const mCyCss = b.m.cy / scale + posM.y;
+    const sCxCss = b.s.cx / scale + posS.x;
+    const sCyCss = b.s.cy / scale + posS.y;
+    drawSharpGlyph("M", mCxCss, mCyCss, b.m.h / scale);
+    drawSharpGlyph("S", sCxCss, sCyCss, b.s.h / scale);
   }
 
   window.addEventListener(
