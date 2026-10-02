@@ -43,27 +43,29 @@
   const calm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // Haptic tick. Android: Vibration API. iOS has none for the web, but
-  // Safari (iOS 18+) ticks when a native switch toggles — so toggle a
-  // hidden one. Only works inside a touch gesture; elsewhere it's a no-op.
-  let iosSwitch = null;
-  if (!navigator.vibrate) {
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.setAttribute("switch", "");
-    input.id = "grid-haptic";
-    input.tabIndex = -1;
-    const label = document.createElement("label");
-    label.htmlFor = input.id;
-    const wrap = document.createElement("div");
-    wrap.setAttribute("aria-hidden", "true");
-    wrap.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden";
-    wrap.append(input, label);
-    document.body.appendChild(wrap);
-    iosSwitch = label;
-  }
+  // Safari (iOS 18+) ticks when a native switch is toggled from a user
+  // gesture (e.g. touchend) — so briefly add a hidden switch and click it.
+  const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;
   function haptic() {
-    if (navigator.vibrate) navigator.vibrate(6);
-    else if (iosSwitch) iosSwitch.click();
+    try {
+      if (navigator.vibrate) {
+        navigator.vibrate(6);
+        return;
+      }
+      if (!coarse) return;
+      const label = document.createElement("label");
+      label.setAttribute("aria-hidden", "true");
+      label.style.display = "none";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.setAttribute("switch", "");
+      label.appendChild(input);
+      document.head.appendChild(label);
+      label.click();
+      label.remove();
+    } catch (err) {
+      /* no haptics here */
+    }
   }
 
   function lerp(a, b, t) {
@@ -229,6 +231,8 @@
     snapText();
 
     D = Math.max(window.innerHeight, root.scrollHeight);
+    // Pages that don't scroll hand vertical finger moves to the grid too
+    root.classList.toggle("grid-scrolls", D > window.innerHeight + 2);
     svg.setAttribute("viewBox", `0 0 ${W} ${D}`);
     svg.style.width = `${W}px`;
     svg.style.height = `${D}px`;
@@ -350,7 +354,7 @@
         if (Math.abs(pull) > snap) {
           release(l);
           // A short tick under the finger when a line snaps free (Android)
-          if (snap > snapDist) haptic();
+          if (snap !== snapDist) haptic();
           continue;
         }
         l.progress = pull * 2;
@@ -360,10 +364,12 @@
     }
   }
 
-  // Fingers are less precise than a mouse: give them more travel
+  // Fingers drag lines about one grid step before they snap — further and
+  // the dense phone grid pushes lines of text into each other
+  const touchSnap = () => Math.max(40, spacing * 1.1);
   window.addEventListener(
     "pointermove",
-    (e) => onMove(e.pageX, e.pageY, e.pointerType === "mouse" ? snapDist : snapDist * 1.7),
+    (e) => onMove(e.pageX, e.pageY, e.pointerType === "mouse" ? snapDist : touchSnap()),
     { passive: true }
   );
 
@@ -379,33 +385,67 @@
     kick();
   }
 
-  // Tap on empty space (touch): pluck the nearest horizontal line there
-  let down = null;
+  // --- Touch ---------------------------------------------------------------
+  // While the browser scrolls, pointer events stop (pointercancel) but touch
+  // events keep coming: use them so the grid still follows the finger.
+  let finger = null; // client position of the finger, while it's down
+  let lastFingerX = NaN;
+  let pointerLive = false;
+  let tap = null;
   window.addEventListener(
     "pointerdown",
     (e) => {
-      down = e.pointerType === "mouse" ? null : { x: e.pageX, y: e.pageY, t: performance.now() };
+      if (e.pointerType !== "mouse") pointerLive = true;
+    },
+    { passive: true }
+  );
+  window.addEventListener("pointercancel", () => (pointerLive = false), { passive: true });
+  window.addEventListener("pointerup", () => (pointerLive = false), { passive: true });
+  window.addEventListener(
+    "touchstart",
+    (e) => {
+      const t = e.touches[0];
+      finger = { x: t.clientX, y: t.clientY };
+      lastFingerX = t.clientX;
+      tap = e.touches.length === 1 ? { x: t.pageX, y: t.pageY, t: performance.now() } : null;
     },
     { passive: true }
   );
   window.addEventListener(
-    "pointerup",
+    "touchmove",
     (e) => {
-      if (!down || e.target.closest("button, a")) return;
-      const moved = Math.hypot(e.pageX - down.x, e.pageY - down.y);
-      if (moved < 10 && performance.now() - down.t < 350) {
-        const l = hLines[Math.round((e.pageY - oy) / spacing)];
-        if (l) {
-          let pull = e.pageY - l.pos;
-          if (Math.abs(pull) < spacing * 0.25) pull = spacing * 0.5 * (pull < 0 ? -1 : 1);
-          flick(l, e.pageX, pull * 2.4);
-          haptic();
-        }
-      }
-      down = null;
+      const t = e.touches[0];
+      finger = { x: t.clientX, y: t.clientY };
+      lastFingerX = t.clientX;
+      // Sideways moves still pluck vertical lines while the page scrolls
+      if (!pointerLive) onMove(t.pageX, t.pageY, touchSnap());
     },
     { passive: true }
   );
+  const touchEnd = (e) => {
+    if (e.touches.length) return;
+    finger = null;
+    if (!pointerLive) releaseAll();
+    // Tap on empty space: pluck the nearest horizontal line there. Runs in
+    // touchend, which iOS accepts as a user gesture for the haptic tick.
+    const t = e.changedTouches[0];
+    if (tap && t && e.type === "touchend" && !(e.target.closest && e.target.closest("button, a"))) {
+      const moved = Math.hypot(t.pageX - tap.x, t.pageY - tap.y);
+      if (moved < 10 && performance.now() - tap.t < 350) {
+        const l = hLines[Math.round((t.pageY - oy) / spacing)];
+        if (l) {
+          let pull = t.pageY - l.pos;
+          if (Math.abs(pull) < spacing * 0.25) pull = spacing * 0.5 * (pull < 0 ? -1 : 1);
+          flick(l, t.pageX, pull * 2.4);
+          haptic();
+        }
+      }
+    }
+    tap = null;
+  };
+  window.addEventListener("touchend", touchEnd, { passive: true });
+  window.addEventListener("touchcancel", touchEnd, { passive: true });
+
   const releaseAll = () => {
     ptr.x = NaN;
     ptr.y = NaN;
@@ -421,15 +461,19 @@
     { passive: true }
   );
   // Scrolling: the net lags behind like rubber — visible horizontal lines
-  // swing with the scroll speed, and the text rides along. (A still pointer
+  // swing with the scroll speed and the text rides along. With a finger on
+  // the screen the finger holds the net: lines under it move with it, lines
+  // further away lag, and the bend sits where the finger is. (A still mouse
   // over moving lines is not treated as crossing them.)
   let lastY = window.scrollY;
   let lastT = performance.now();
   window.addEventListener(
     "scroll",
     () => {
-      ptr.x = NaN;
-      ptr.y = NaN;
+      if (!finger) {
+        ptr.x = NaN;
+        ptr.y = NaN;
+      }
       const now = performance.now();
       const v = ((window.scrollY - lastY) / Math.max(8, now - lastT)) * 16; // px per frame
       lastY = window.scrollY;
@@ -438,11 +482,15 @@
       const top = window.scrollY - spacing;
       const bottom = window.scrollY + window.innerHeight + spacing;
       const cap = spacing * 1.2;
+      const fy = finger ? finger.y + window.scrollY : NaN;
+      const hold2 = 2 * Math.pow(spacing * 1.3, 2);
       for (const l of hLines) {
         if (l.pos < top || l.pos > bottom) continue;
         const vary = 0.75 + 0.25 * Math.sin(l.pos * 0.05);
-        const amp = Math.max(-cap, Math.min(cap, v * 1.6)) * vary;
-        flick(l, W * (0.5 + 0.3 * Math.sin(l.pos * 0.013)), amp);
+        const held = finger ? Math.exp(-Math.pow(l.pos - fy, 2) / hold2) : 0;
+        const amp = Math.max(-cap, Math.min(cap, v * 1.6)) * vary * (1 - held);
+        const x = lastFingerX === lastFingerX ? lastFingerX : W * (0.5 + 0.3 * Math.sin(l.pos * 0.013));
+        flick(l, x, amp);
       }
     },
     { passive: true }
