@@ -351,3 +351,92 @@ a {
 @media (max-width: 640px) {
   .mega { font-size: clamp(5.5rem, 42vw, 9rem); }
 }
+
+/* Settings menu (tune.js) */
+#tune-btn {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 120;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+#tune-btn span {
+  display: block;
+  width: 18px;
+  height: 1.5px;
+  background: var(--ink);
+  transition: transform 0.25s var(--ease), opacity 0.2s;
+}
+#tune-btn.is-open span:nth-child(1) { transform: translateY(5.5px) rotate(45deg); }
+#tune-btn.is-open span:nth-child(2) { opacity: 0; }
+#tune-btn.is-open span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
+#tune-panel {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(1rem + 52px);
+  z-index: 119;
+  width: min(320px, calc(100vw - 2rem));
+  max-height: min(72vh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: 0.75rem 1rem 1rem;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+#tune-panel[hidden] { display: none; }
+#tune-panel h3 {
+  margin: 0.75rem 0 0.4rem;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+.tune-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.15rem 0.5rem;
+  padding: 0.3rem 0;
+}
+.tune-row input { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: var(--ink); }
+.tune-row input[type="color"] { height: 24px; padding: 0; border: 0; background: none; }
+.tune-row input[type="checkbox"] { grid-column: auto; grid-row: 1; grid-column-start: 2; width: auto; }
+.tune-val { font-variant-numeric: tabular-nums; opacity: 0.6; }
+.tune-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+.tune-actions button {
+  flex: 1;
+  text-align: center;
+  padding: 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  font-size: 12px;
+}
+/* Phones: a low sheet at the bottom, so the MS stays visible above it */
+@media (max-width: 640px) {
+  #tune-panel {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    bottom: calc(0.75rem + 52px);
+    max-height: 42vh;
+  }
+  #tune-btn { right: 0.5rem; bottom: 0.75rem; }
+}
