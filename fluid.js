@@ -26,11 +26,11 @@
 
   const T = (window.fluidTune = Object.assign(
     {
-      size: 0.05, // drop radius, × MS font size
-      rest: 0.2, // size while the pointer rests, share of the full size
-      count: 5, // drops in the chain
+      size: 0.08, // drop radius, × MS font size
+      rest: 0.05, // size while the pointer rests, share of the full size
+      count: 6, // drops in the chain
       taper: 0.7, // how much smaller the last drop is than the first
-      follow: 0.21, // spring stiffness of the chain
+      follow: 0.15, // spring stiffness of the chain
       wobble: 0.4, // damping (higher = more overshoot)
       merge: 3, // smooth-minimum radius, × drop radius
       decay: 0.995, // how slowly the drop shrinks back after a move
