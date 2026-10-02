@@ -2,14 +2,64 @@
   /**
    * Settings menu: a small hamburger (bottom right) that opens sliders for
    * the MS goo (window.msTune, fieldlines.js) and the dot grid
-   * (window.gridTune, grid.js). Values apply live and are remembered in
-   * this browser; "Werte kopieren" copies them as JSON to share.
+   * (window.gridTune, grid.js). Values apply live. Settings can be stored
+   * as numbered saves ("Speicherung 01", 02, …): load by clicking, delete
+   * with ×, and tick one as the default that loads on every visit. Saves
+   * 01 and 02 ship with the site; further saves and the default tick live
+   * in this browser (localStorage). "Werte kopieren" copies the current
+   * values as JSON to share.
    */
   const MS = window.msTune;
   const GRID = window.gridTune;
   if (!MS || !GRID) return;
-  const KEY = "ms-tune-v1";
+  const STORE = "ms-tune-saves-v1";
   const DEFAULTS = { ms: { ...MS }, grid: { ...GRID } };
+
+  // Saves that ship with the site: 01 = the code defaults, 02 = a second look
+  const BUILTIN = [
+    { name: "Speicherung 01", ms: { ...DEFAULTS.ms }, grid: { ...DEFAULTS.grid } },
+    {
+      name: "Speicherung 02",
+      ms: {
+        weight: 600,
+        color: "#000000",
+        merge: 0.08,
+        thicken: 1.05,
+        mass: 0.39,
+        drops: 0.15,
+        satellites: 0.04,
+        pull: 0.45,
+        spread: 0.04,
+        reach: 1,
+        hole: 0.085,
+        lean: 0.2,
+        stretch: 0.2,
+      },
+      grid: {
+        spacing: 0.16,
+        restSize: 1,
+        maxSize: 0.8,
+        catchR: 2,
+        leash: 2.5,
+        pullNear: 1,
+        pullFar: 1,
+        follow: 0.3,
+        spring: 0.01,
+        wobble: 0.74,
+        roundness: 12,
+        restColor: "#ffffff",
+        peakColor: "#ffffff",
+        fadeColor: "#ffffff",
+        peakAt: 0.05,
+        goo: 1,
+        outline: true,
+        outlineColor: "#595959",
+        outlineWidth: 0.3,
+        outlineFrom: 0,
+        textFollow: 0.1,
+      },
+    },
+  ];
 
   // [key, label, min, max, step] — or [key, label, "color"] / [key, label, "toggle"]
   const GROUPS = [
@@ -62,22 +112,25 @@
     },
   ];
 
-  function save() {
+  // { saves: [{ name, ms, grid }], def: name | null, next: number }
+  function readState() {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ ms: MS, grid: GRID }));
+      const v = JSON.parse(localStorage.getItem(STORE) || "null");
+      if (v && Array.isArray(v.saves)) return v;
+    } catch (e) {
+      /* ignore */
+    }
+    return { saves: BUILTIN.map((p) => JSON.parse(JSON.stringify(p))), def: "Speicherung 01", next: 3 };
+  }
+  function writeState() {
+    try {
+      localStorage.setItem(STORE, JSON.stringify(state));
     } catch (e) {
       /* storage unavailable */
     }
   }
-  function load() {
-    try {
-      const v = JSON.parse(localStorage.getItem(KEY) || "null");
-      if (v && v.ms) Object.assign(MS, v.ms);
-      if (v && v.grid) Object.assign(GRID, v.grid);
-    } catch (e) {
-      /* ignore */
-    }
-  }
+  const state = readState();
+  let current = null; // name of the save the sliders currently match
 
   let rebuildT = null;
   function applyGrid(key, group) {
@@ -109,6 +162,80 @@
     const dec = String(step).includes(".") ? String(step).split(".")[1].length : 0;
     return v.toFixed(dec);
   }
+
+  // --- Saves -----------------------------------------------------------------
+  const savesSec = document.createElement("section");
+  savesSec.className = "tune-saves";
+  const savesH = document.createElement("h3");
+  savesH.textContent = "Speicherungen";
+  const savesList = document.createElement("div");
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "tune-add";
+  addBtn.textContent = "+ Speichern";
+  const savesNote = document.createElement("p");
+  savesNote.className = "tune-note";
+  savesNote.textContent = "Häkchen = Standard beim Öffnen. Eigene Speicherungen gelten nur in diesem Browser.";
+  savesSec.append(savesH, savesList, addBtn, savesNote);
+  panel.appendChild(savesSec);
+
+  function apply(save) {
+    Object.assign(MS, DEFAULTS.ms, save.ms);
+    Object.assign(GRID, DEFAULTS.grid, save.grid);
+    inputs.forEach((f) => f());
+    if (window.gridRebuild) window.gridRebuild();
+    current = save.name;
+    renderSaves();
+  }
+
+  function renderSaves() {
+    savesList.textContent = "";
+    for (const sv of state.saves) {
+      const row = document.createElement("div");
+      row.className = "tune-save" + (sv.name === current ? " is-current" : "");
+      const tick = document.createElement("input");
+      tick.type = "checkbox";
+      tick.checked = state.def === sv.name;
+      tick.title = "Als Standard beim Öffnen";
+      tick.setAttribute("aria-label", `${sv.name} als Standard`);
+      tick.addEventListener("change", () => {
+        state.def = tick.checked ? sv.name : state.def === sv.name ? null : state.def;
+        writeState();
+        renderSaves();
+      });
+      const name = document.createElement("button");
+      name.type = "button";
+      name.className = "tune-save-name";
+      name.textContent = sv.name;
+      name.title = "Laden";
+      name.addEventListener("click", () => apply(sv));
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "tune-save-del";
+      del.textContent = "×";
+      del.title = "Löschen";
+      del.setAttribute("aria-label", `${sv.name} löschen`);
+      del.addEventListener("click", () => {
+        if (!window.confirm(`${sv.name} löschen?`)) return;
+        state.saves = state.saves.filter((x) => x !== sv);
+        if (state.def === sv.name) state.def = null;
+        if (current === sv.name) current = null;
+        writeState();
+        renderSaves();
+      });
+      row.append(tick, name, del);
+      savesList.appendChild(row);
+    }
+  }
+
+  addBtn.addEventListener("click", () => {
+    const name = `Speicherung ${String(state.next).padStart(2, "0")}`;
+    state.next += 1;
+    state.saves.push({ name, ms: { ...MS }, grid: { ...GRID } });
+    current = name;
+    writeState();
+    renderSaves();
+  });
 
   for (const group of GROUPS) {
     const sec = document.createElement("section");
@@ -145,7 +272,8 @@
         group.target[key] = v;
         out.textContent = input.type === "range" ? fmt(v, step) : "";
         if (group.target === GRID) applyGrid(key, group);
-        save();
+        current = null; // edited: no longer matches a save
+        renderSaves();
       });
       inputs.push(sync);
       sync();
@@ -160,17 +288,7 @@
   const reset = document.createElement("button");
   reset.type = "button";
   reset.textContent = "Zurücksetzen";
-  reset.addEventListener("click", () => {
-    Object.assign(MS, DEFAULTS.ms);
-    Object.assign(GRID, DEFAULTS.grid);
-    try {
-      localStorage.removeItem(KEY);
-    } catch (e) {
-      /* ignore */
-    }
-    inputs.forEach((f) => f());
-    if (window.gridRebuild) window.gridRebuild();
-  });
+  reset.addEventListener("click", () => apply(BUILTIN[0]));
   const copy = document.createElement("button");
   copy.type = "button";
   copy.textContent = "Werte kopieren";
@@ -207,8 +325,13 @@
 
   document.body.append(panel, btn);
 
-  // Saved values apply after the elements exist
-  load();
-  inputs.forEach((f) => f());
-  if (window.gridRebuild) window.gridRebuild();
+  // The default save (if any) loads on every visit
+  try {
+    localStorage.removeItem("ms-tune-v1"); // old auto-saved slider state
+  } catch (e) {
+    /* ignore */
+  }
+  const def = state.saves.find((x) => x.name === state.def);
+  if (def) apply(def);
+  else renderSaves();
 })();
