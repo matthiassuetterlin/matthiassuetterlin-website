@@ -558,7 +558,14 @@
 
   // --- Input ---------------------------------------------------------------
 
+  // In "fluid" mode (fluid.js) the dots rest and stay hidden
+  const dotsOn = () => window.fxMode !== "fluid";
+
   function point(x, y, touch) {
+    if (!dotsOn()) {
+      ptr.on = false;
+      return;
+    }
     ptr.x = x;
     ptr.y = y;
     ptr.on = true;
@@ -601,6 +608,7 @@
       const v = ((window.scrollY - lastY) / Math.max(8, now - lastT)) * 16; // px per frame
       lastY = window.scrollY;
       lastT = now;
+      if (!dotsOn()) return;
       if (calm || Math.abs(v) < 1.5 || !dots.length) {
         kick();
         return;

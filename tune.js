@@ -1,8 +1,9 @@
 (() => {
   /**
    * Settings menu: a small hamburger (bottom right) that opens sliders for
-   * the MS goo (window.msTune, fieldlines.js) and the dot grid
-   * (window.gridTune, grid.js). Values apply live. Settings can be stored
+   * the MS goo (window.msTune, fieldlines.js), the liquid drop
+   * (window.fluidTune, fluid.js) and the dot grid (window.gridTune,
+   * grid.js); a switch on top picks the drop or the dots. Values apply live. Settings can be stored
    * as numbered saves ("Speicherung 01", 02, …): load by clicking, delete
    * with ×, and tick one as the default that loads on every visit. Saves
    * 01 (the earlier look) and 02 (the code defaults) ship with the site;
@@ -11,9 +12,10 @@
    */
   const MS = window.msTune;
   const GRID = window.gridTune;
+  const FLUID = window.fluidTune || {};
   if (!MS || !GRID) return;
   const STORE = "ms-tune-saves-v1";
-  const DEFAULTS = { ms: { ...MS }, grid: { ...GRID } };
+  const DEFAULTS = { ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID } };
 
   // Saves that ship with the site: 01 = the earlier look, 02 = the code defaults
   const BUILTIN = [
@@ -83,8 +85,33 @@
       ],
     },
     {
+      title: "Fluid",
+      target: FLUID,
+      mode: "fluid",
+      rows: [
+        ["size", "Tropfengröße", 0.04, 0.4, 0.01],
+        ["rest", "Größe in Ruhe", 0, 1, 0.05],
+        ["count", "Anzahl Tropfen", 1, 12, 1],
+        ["taper", "Verjüngung der Spur", 0, 0.95, 0.05],
+        ["follow", "Folgen (Steifigkeit)", 0.05, 0.6, 0.01],
+        ["wobble", "Nachwippen", 0.4, 0.95, 0.01],
+        ["merge", "Verschmelzen", 0.1, 3, 0.05],
+        ["decay", "Abklingen", 0.85, 0.995, 0.005],
+        ["lens", "Linse (Vergrößerung)", 0, 0.6, 0.01],
+        ["rim", "Brechung am Rand", 0, 0.4, 0.01],
+        ["fringe", "Farbsaum", 0, 1, 0.05],
+        ["gloss", "Glanz", 0, 1, 0.05],
+        ["fillColor", "Füllfarbe", "color"],
+        ["fill", "Füllung", 0, 1, 0.05],
+        ["outline", "Outline", "toggle"],
+        ["outlineColor", "Farbe Outline", "color"],
+        ["outlineWidth", "Stärke Outline", 0, 4, 0.1],
+      ],
+    },
+    {
       title: "Punkte",
       target: GRID,
+      mode: "dots",
       rebuild: ["spacing"],
       rows: [
         ["spacing", "Rasterabstand", 0.12, 0.35, 0.01],
@@ -182,8 +209,10 @@
   function apply(save) {
     Object.assign(MS, DEFAULTS.ms, save.ms);
     Object.assign(GRID, DEFAULTS.grid, save.grid);
+    Object.assign(FLUID, DEFAULTS.fluid, save.fluid || {});
     inputs.forEach((f) => f());
     if (window.gridRebuild) window.gridRebuild();
+    if (window.fluidRefresh) window.fluidRefresh();
     current = save.name;
     renderSaves();
   }
@@ -231,14 +260,46 @@
   addBtn.addEventListener("click", () => {
     const name = `Speicherung ${String(state.next).padStart(2, "0")}`;
     state.next += 1;
-    state.saves.push({ name, ms: { ...MS }, grid: { ...GRID } });
+    state.saves.push({ name, ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID } });
     current = name;
     writeState();
     renderSaves();
   });
 
+  // --- Mode: dot grid (old) or liquid drop (new) ------------------------------
+  const groupSecs = [];
+  const modeSec = document.createElement("section");
+  const modeH = document.createElement("h3");
+  modeH.textContent = "Hintergrund";
+  const modeRow = document.createElement("div");
+  modeRow.className = "tune-mode";
+  const modeBtns = [
+    ["dots", "Punkte (alt)"],
+    ["fluid", "Fluid (neu)"],
+  ].map(([m, label]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.dataset.mode = m;
+    b.disabled = m === "fluid" && !window.fxAvailable;
+    b.addEventListener("click", () => {
+      if (window.fxSetMode) window.fxSetMode(m);
+      syncMode();
+    });
+    modeRow.appendChild(b);
+    return b;
+  });
+  modeSec.append(modeH, modeRow);
+  panel.insertBefore(modeSec, savesSec);
+  function syncMode() {
+    const m = window.fxMode || "dots";
+    for (const b of modeBtns) b.setAttribute("aria-pressed", String(b.dataset.mode === m));
+    for (const [sec, group] of groupSecs) sec.hidden = !!group.mode && group.mode !== m;
+  }
+
   for (const group of GROUPS) {
     const sec = document.createElement("section");
+    groupSecs.push([sec, group]);
     const h = document.createElement("h3");
     h.textContent = group.title;
     sec.appendChild(h);
@@ -272,6 +333,7 @@
         group.target[key] = v;
         out.textContent = input.type === "range" ? fmt(v, step) : "";
         if (group.target === GRID) applyGrid(key, group);
+        if (group.target === FLUID && key === "size" && window.fluidRefresh) window.fluidRefresh();
         current = null; // edited: no longer matches a save
         renderSaves();
       });
@@ -293,7 +355,7 @@
   copy.type = "button";
   copy.textContent = "Werte kopieren";
   copy.addEventListener("click", async () => {
-    const text = JSON.stringify({ ms: MS, grid: GRID }, null, 2);
+    const text = JSON.stringify({ ms: MS, grid: GRID, fluid: FLUID }, null, 2);
     try {
       await navigator.clipboard.writeText(text);
       copy.textContent = "Kopiert ✓";
@@ -324,6 +386,7 @@
   }
 
   document.body.append(panel, btn);
+  syncMode();
 
   // The default save (if any) loads on every visit
   try {
