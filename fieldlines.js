@@ -81,7 +81,7 @@
   // The pointer's liquid drop (fluid.js) melting into the letters
   const FLUID = 12;
   const fluidNodes = [];
-  for (let i = 0; i < FLUID; i++) fluidNodes.push(el("circle", { r: "0", cx: "0", cy: "0" }, goo));
+  for (let i = 0; i < FLUID * 3; i++) fluidNodes.push(el("circle", { r: "0", cx: "0", cy: "0" }, goo));
 
   function clamp(v, a, b) {
     return v < a ? a : v > b ? b : v;
@@ -296,15 +296,21 @@
       d.node.setAttribute("r", Math.max(0, r).toFixed(1));
     }
     // Melting drop: the blur eats into small circles, so they get a little
-    // extra radius to keep their size
+    // extra radius to keep their size. Two bridge drops reach from each
+    // melting drop to the nearest point of the letter, so they grow together.
     for (let i = 0; i < FLUID; i++) {
       const d = melt[i];
-      const node = fluidNodes[i];
-      const r = d ? d.r + sigma * 0.9 * d.m : 0;
-      node.setAttribute("r", r.toFixed(1));
-      if (d) {
-        node.setAttribute("cx", d.x.toFixed(1));
-        node.setAttribute("cy", d.y.toFixed(1));
+      for (let k = 0; k < 3; k++) {
+        const node = fluidNodes[i * 3 + k];
+        if (!d) {
+          node.setAttribute("r", "0");
+          continue;
+        }
+        const t = k * 0.36; // 0 = the drop itself, then towards the letter
+        const r = (k ? d.r * (0.62 - 0.12 * k) : d.r) + sigma * 0.9 * d.m;
+        node.setAttribute("cx", lerp(d.x, d.nx, t).toFixed(1));
+        node.setAttribute("cy", lerp(d.y, d.ny, t).toFixed(1));
+        node.setAttribute("r", Math.max(0, r).toFixed(1));
       }
     }
     // Satellites: mass drawn out toward the pointer
