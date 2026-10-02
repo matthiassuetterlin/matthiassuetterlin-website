@@ -186,7 +186,7 @@
     const cc = clamp(c, 0, 1);
 
     // Far: letters drift apart. Centre: pulled into each other.
-    const spread = W * 0.14;
+    const spread = W * 0.04;
     const pull = G.gap * 0.5 + W * 0.1;
     spring(sep, lerp(spread, -pull, c), 0.1, 0.78);
 
@@ -289,6 +289,7 @@
   window.addEventListener(
     "pointerdown",
     (e) => {
+      clearTimeout(touchT);
       mouse.active = true;
       mouse.x = e.clientX;
       mouse.y = e.clientY;
@@ -302,6 +303,15 @@
     },
     { passive: true }
   );
+  // Touch: after the finger lifts, linger briefly, then drift back to idle
+  let touchT = null;
+  const touchEnd = (e) => {
+    if (e.pointerType === "mouse") return;
+    clearTimeout(touchT);
+    touchT = setTimeout(() => (mouse.active = false), 700);
+  };
+  window.addEventListener("pointerup", touchEnd, { passive: true });
+  window.addEventListener("pointercancel", touchEnd, { passive: true });
   window.addEventListener(
     "blur",
     () => {
