@@ -218,9 +218,9 @@
 
     // Goo: blur radius and threshold grow with closeness
     const sigma = lerp(0.9, H * 0.05, Math.pow(cc, 1.15));
-    const thr = lerp(0.5, 0.43, cc);
+    const thr = lerp(0.5, 0.4, cc);
     // Thicken the glyphs as the goo grows so hairlines melt instead of vanishing
-    const sw = (sigma * 0.55).toFixed(2);
+    const sw = (sigma * 0.8).toFixed(2);
     tM.setAttribute("stroke-width", sw);
     tS.setAttribute("stroke-width", sw);
     const A = 50;
@@ -236,7 +236,7 @@
     const my = (p0y + p2y) * 0.5;
     const p1x = mx + (aim.x - mx) * 0.6 * cc;
     const p1y = my + (aim.y - my) * 0.6 * cc;
-    const rMax = H * 0.06 * Math.pow(cc, 1.3);
+    const rMax = H * 0.07 * Math.pow(cc, 1.3);
     for (let i = 0; i < CHAIN; i++) {
       const d = drops[i];
       const t = (i + 0.5) / CHAIN;

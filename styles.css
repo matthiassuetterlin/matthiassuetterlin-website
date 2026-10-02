@@ -237,9 +237,23 @@ a {
   z-index: 1;
   touch-action: none;
 }
-.home-inner .string-home {
-  margin: 1.75rem 0 0.25rem;
+/* Tagline sits on one pluckable line instead of two underlines */
+.tagline-wrap {
+  position: relative;
   z-index: 4;
+  width: max-content;
+  max-width: 100%;
+  margin: 1.5rem auto 0;
+}
+.tagline-wrap .tagline {
+  margin: 0;
+  justify-content: center;
+}
+.tagline-wrap .text-link {
+  border-bottom: 0;
+}
+.home-inner .string-home {
+  margin: 0.6rem 0 0;
 }
 
 .home-hint {
