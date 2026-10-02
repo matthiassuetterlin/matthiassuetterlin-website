@@ -145,11 +145,11 @@ a {
   justify-content: center;
   animation: enter 0.45s var(--ease);
 }
-/* Touch: on the start page a finger drives the goo and the grid (nothing
-   to scroll there); on content pages vertical swipes scroll, sideways
-   swipes pluck. */
-.view-home { touch-action: pinch-zoom; }
-.view:not(.view-home) { touch-action: pan-y pinch-zoom; }
+/* Touch: where nothing scrolls (start page, short pages) a finger drives
+   the goo and the grid directly; on pages that scroll, vertical swipes
+   scroll and the grid follows the finger via touch events (grid.js). */
+.view { touch-action: pinch-zoom; }
+.grid-scrolls .view:not(.view-home) { touch-action: pan-y pinch-zoom; }
 
 .view-home.is-active {
   position: relative;
