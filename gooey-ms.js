@@ -1,7 +1,9 @@
 (() => {
   /**
    * Restrained gooey MS — Larose circle-along-path + SVG gooey filter.
-   * Paths sampled via getPointAtLength; morph M ↔ MS ↔ S.
+   * Serif skeletons from Playfair-like metrics: bracketed foot/head serifs,
+   * thicker outer stems (extra path travel), classic proportions.
+   * Soft easeInOut + continuous pointer blend for organic motion.
    */
   const home = document.getElementById("view-home");
   const circlesLayer = document.getElementById("ms-circles");
@@ -9,27 +11,73 @@
   const stateBtns = [...document.querySelectorAll("[data-ms-shape]")];
   if (!home || !circlesLayer || !pathsLayer) return;
 
-  // viewBox 0 0 320 260 — relative radius ~ Larose (20/256)
+  // viewBox 0 0 320 260 — serif centerlines (Playfair Display proportions)
+  // Extra stem travel + out-and-back serifs thicken stems/terminals under goo.
   const PATHS = {
-    m: "M 40,230 L 40,40 L 110,170 L 180,40 L 180,230",
-    s: "M 265,55 C 230,30 175,35 160,75 C 145,115 205,130 240,145 C 280,165 285,205 250,225 C 215,245 170,235 155,205",
-    // Continuous MS snake through both columns (readable dual letter)
-    ms: "M 35,230 L 35,40 L 95,165 L 155,40 L 155,230 L 155,195 C 170,240 220,250 255,225 C 290,200 295,155 260,130 C 225,105 185,120 190,155 C 195,185 240,190 270,170",
+    m:
+      // Left bracketed foot serif → thick left stem (double pass) → top serif
+      // → left diagonal → crotch → right diagonal → top serif → thick right stem
+      // → bracketed foot serif
+      "M 14,222 " +
+      "C 18,236 44,238 58,228 " +
+      "L 62,220 L 62,40 " +
+      "C 62,28 50,24 28,24 " +
+      "L 16,24 L 62,24 L 62,48 " +
+      "L 62,220 L 62,48 " +
+      "L 112,188 L 162,48 " +
+      "L 162,24 L 208,24 L 192,24 " +
+      "C 172,24 162,28 162,40 " +
+      "L 162,220 L 162,48 L 162,220 " +
+      "L 166,228 " +
+      "C 180,238 208,236 212,222",
+    s:
+      // High-contrast S: beak terminals, deep bowls (Playfair stress)
+      "M 298,64 " +
+      "C 296,36 268,20 232,20 " +
+      "C 188,20 148,42 142,84 " +
+      "C 136,122 168,142 218,156 " +
+      "C 268,170 304,190 300,226 " +
+      "C 296,260 258,272 210,266 " +
+      "C 170,260 138,240 132,206",
+    ms:
+      // Continuous snake: serif M into serif S bowls
+      "M 12,222 " +
+      "C 16,236 38,238 50,228 " +
+      "L 54,220 L 54,40 " +
+      "C 54,28 44,24 26,24 " +
+      "L 16,24 L 54,24 L 54,48 " +
+      "L 54,210 L 54,48 " +
+      "L 96,178 L 138,48 " +
+      "L 138,24 L 168,24 L 156,24 " +
+      "C 144,24 138,28 138,40 " +
+      "L 138,200 " +
+      "C 144,244 192,260 234,240 " +
+      "C 272,222 288,176 258,146 " +
+      "C 232,120 190,128 192,160 " +
+      "C 194,188 228,202 266,186 " +
+      "C 292,172 310,190 306,222 " +
+      "C 302,256 264,270 220,262 " +
+      "C 184,254 154,236 148,208",
   };
 
-  const NB = 30;
-  const RADIUS = 20;
-  const STAGGER = 0.012;
-  const DURATION = 700;
+  const NB = 42;
+  const RADIUS = 18;
+  const STAGGER = 0.005;
+  const DURATION = 1300;
+  const BLEND_EASE = 0.07;
 
   const order = ["m", "ms", "s"];
   let index = 1;
   let animToken = 0;
   const pathEls = {};
   const circleEls = [];
+  let cachedPts = null;
+  let blend = 1;
+  let targetBlend = 1;
+  let pointerDriven = true;
 
-  function easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   }
 
   function build() {
@@ -52,73 +100,140 @@
     }
   }
 
-  function pointsFor(shapeIndex) {
+  function samplePath(shapeIndex) {
     const path = pathEls[order[shapeIndex]];
     const length = path.getTotalLength();
     const pts = [];
     for (let i = 0; i < NB; i++) {
-      const pt = path.getPointAtLength((length * i) / NB);
+      const t = NB === 1 ? 0 : i / (NB - 1);
+      const pt = path.getPointAtLength(length * t);
       pts.push({ x: pt.x, y: pt.y });
     }
     return pts;
   }
 
-  function morphTo(shapeIndex, instant) {
-    if (shapeIndex < 0 || shapeIndex > 2) return;
+  function cachePoints() {
+    cachedPts = [0, 1, 2].map(samplePath);
+  }
+
+  function pointsAtBlend(b) {
+    const clamped = Math.max(0, Math.min(2, b));
+    const i0 = Math.floor(clamped);
+    const i1 = Math.min(2, i0 + 1);
+    const t = easeInOutCubic(clamped - i0);
+    const a = cachedPts[i0];
+    const c = cachedPts[i1];
+    const out = [];
+    for (let i = 0; i < NB; i++) {
+      out.push({
+        x: a[i].x + (c[i].x - a[i].x) * t,
+        y: a[i].y + (c[i].y - a[i].y) * t,
+      });
+    }
+    return out;
+  }
+
+  function applyPoints(pts) {
+    for (let i = 0; i < NB; i++) {
+      circleEls[i].setAttribute("cx", String(pts[i].x));
+      circleEls[i].setAttribute("cy", String(pts[i].y));
+    }
+  }
+
+  function syncButtons(shapeIndex) {
     index = shapeIndex;
     stateBtns.forEach((btn) => {
       const on = Number(btn.dataset.msShape) === index;
       btn.classList.toggle("is-active", on);
       btn.setAttribute("aria-pressed", on ? "true" : "false");
     });
+  }
 
-    const pts = pointsFor(index);
+  function morphTo(shapeIndex, instant) {
+    if (shapeIndex < 0 || shapeIndex > 2) return;
+    pointerDriven = false;
+    syncButtons(shapeIndex);
+    targetBlend = shapeIndex;
     const token = ++animToken;
 
-    circleEls.forEach((circle, i) => {
-      const target = pts[i];
-      if (instant) {
-        circle.setAttribute("cx", String(target.x));
-        circle.setAttribute("cy", String(target.y));
-        return;
-      }
-      const fromX = parseFloat(circle.getAttribute("cx")) || target.x;
-      const fromY = parseFloat(circle.getAttribute("cy")) || target.y;
-      const delay = i * STAGGER * 1000;
-      const startAt = performance.now() + delay;
+    if (instant) {
+      blend = shapeIndex;
+      applyPoints(pointsAtBlend(blend));
+      pointerDriven = true;
+      return;
+    }
 
+    const fromPts = pointsAtBlend(blend);
+    const toPts = pointsAtBlend(shapeIndex);
+    const startAt = performance.now();
+
+    circleEls.forEach((circle, i) => {
+      const delay = i * STAGGER * 1000;
       const tick = (now) => {
         if (token !== animToken) return;
-        if (now < startAt) {
+        const elapsed = now - startAt - delay;
+        if (elapsed < 0) {
           requestAnimationFrame(tick);
           return;
         }
-        const t = Math.min(1, (now - startAt) / DURATION);
-        const e = easeOutCubic(t);
-        circle.setAttribute("cx", String(fromX + (target.x - fromX) * e));
-        circle.setAttribute("cy", String(fromY + (target.y - fromY) * e));
-        if (t < 1) requestAnimationFrame(tick);
+        const t = Math.min(1, elapsed / DURATION);
+        const e = easeInOutCubic(t);
+        circle.setAttribute(
+          "cx",
+          String(fromPts[i].x + (toPts[i].x - fromPts[i].x) * e)
+        );
+        circle.setAttribute(
+          "cy",
+          String(fromPts[i].y + (toPts[i].y - fromPts[i].y) * e)
+        );
+        if (t < 1) {
+          requestAnimationFrame(tick);
+        } else if (i === NB - 1) {
+          blend = shapeIndex;
+          pointerDriven = true;
+        }
       };
       requestAnimationFrame(tick);
     });
   }
 
-  let lastAuto = 1;
-  function shapeFromPointer(clientX) {
-    const n = clientX / (window.innerWidth || 1);
-    if (n < 0.34) return 0;
-    if (n > 0.66) return 2;
-    return 1;
+  function blendFromPointer(clientX) {
+    const n = Math.max(0, Math.min(1, clientX / (window.innerWidth || 1)));
+    return n * 2;
+  }
+
+  function nearestShape(b) {
+    return Math.max(0, Math.min(2, Math.round(b)));
+  }
+
+  function loop() {
+    requestAnimationFrame(loop);
+    if (!home.classList.contains("is-active")) return;
+    if (!pointerDriven) return;
+
+    const diff = targetBlend - blend;
+    if (Math.abs(diff) < 0.0008) {
+      if (blend !== targetBlend) {
+        blend = targetBlend;
+        applyPoints(pointsAtBlend(blend));
+        syncButtons(nearestShape(blend));
+      }
+      return;
+    }
+    blend += diff * BLEND_EASE;
+    applyPoints(pointsAtBlend(blend));
+    const shape = nearestShape(blend);
+    if (shape !== index) syncButtons(shape);
   }
 
   home.addEventListener(
     "pointermove",
     (e) => {
       if (!home.classList.contains("is-active")) return;
-      const next = shapeFromPointer(e.clientX);
-      if (next !== lastAuto) {
-        lastAuto = next;
-        morphTo(next, false);
+      targetBlend = blendFromPointer(e.clientX);
+      if (!pointerDriven) {
+        animToken++;
+        pointerDriven = true;
       }
     },
     { passive: true }
@@ -127,12 +242,14 @@
   stateBtns.forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const i = Number(btn.dataset.msShape);
-      lastAuto = i;
-      morphTo(i, false);
+      morphTo(Number(btn.dataset.msShape), false);
     });
   });
 
   build();
-  requestAnimationFrame(() => morphTo(1, true));
+  requestAnimationFrame(() => {
+    cachePoints();
+    morphTo(1, true);
+    loop();
+  });
 })();
