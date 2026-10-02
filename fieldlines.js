@@ -202,28 +202,44 @@
     fctx.restore();
   }
 
-  function softThreshold() {
+  let edgeOut = null;
+
+  // Crisp iso-contour: anti-alias over ~1px using the local field gradient,
+  // so shallow melt regions get the same sharp outline as the letters.
+  function crispThreshold() {
     const img = fctx.getImageData(0, 0, iw, ih);
-    const d = img.data;
-    // Slightly wider ramp + higher res = less stair-step noise
-    const lo = 132;
-    const hi = 172;
-    const inv = 1 / (hi - lo);
-    for (let i = 0; i < d.length; i += 4) {
-      const v = d[i];
-      if (v <= lo) {
-        d[i + 3] = 0;
-      } else {
-        const tt = v >= hi ? 1 : (v - lo) * inv;
-        // smoothstep for cleaner edges
-        const t = tt * tt * (3 - 2 * tt);
-        d[i] = 0;
-        d[i + 1] = 0;
-        d[i + 2] = 0;
-        d[i + 3] = (t * 255) | 0;
+    const src = img.data;
+    if (!edgeOut || edgeOut.width !== iw || edgeOut.height !== ih) {
+      edgeOut = fctx.createImageData(iw, ih);
+    }
+    const out = edgeOut.data;
+    const T = 150;
+    // Beyond this distance from T the pixel is >1px from the edge for any
+    // gradient the blurred field can have — skip the gradient math there.
+    const BAND = 48;
+    const row = iw * 4;
+    for (let y = 0; y < ih; y++) {
+      const y0 = y > 0 ? -row : 0;
+      const y1 = y < ih - 1 ? row : 0;
+      let i = y * row;
+      for (let x = 0; x < iw; x++, i += 4) {
+        const dv = src[i] - T;
+        let a;
+        if (dv <= -BAND) {
+          a = 0;
+        } else if (dv >= BAND) {
+          a = 255;
+        } else {
+          const gx = (src[x < iw - 1 ? i + 4 : i] - src[x > 0 ? i - 4 : i]) * 0.5;
+          const gy = (src[i + y1] - src[i + y0]) * 0.5;
+          const g = Math.sqrt(gx * gx + gy * gy);
+          const t = g > 0.001 ? dv / g + 0.5 : dv > 0 ? 1 : 0;
+          a = t <= 0 ? 0 : t >= 1 ? 255 : (t * 255) | 0;
+        }
+        out[i + 3] = a;
       }
     }
-    fctx.putImageData(img, 0, 0);
+    fctx.putImageData(edgeOut, 0, 0);
   }
 
   function frame(now) {
@@ -424,12 +440,12 @@
     }
 
     // Extra blur pass — smooths capsules/ellipses, kills pixel noise
-    const blurPx = Math.max(3.8, 8.2 * scale);
+    const blurPx = Math.max(5, 11 * scale);
     fctx.filter = `blur(${blurPx.toFixed(2)}px)`;
     fctx.drawImage(field, 0, 0);
     fctx.filter = "none";
 
-    softThreshold();
+    crispThreshold();
 
     ctx.clearRect(0, 0, cssW, cssH);
     ctx.imageSmoothingEnabled = true;
