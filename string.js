@@ -2,12 +2,14 @@
   /**
    * Pluckable lines (after olivierlarose/svg-bezier-curve).
    *
-   * A thin line drawn as a quadratic Bézier. Moving the pointer across it
-   * bends it at the pointer position with the vertical movement; leaving
-   * lets it swing out like a plucked string. Works with mouse and touch.
+   * A thin line drawn as a quadratic Bézier. Crossing it grabs the line:
+   * it follows the pointer up or down until it snaps free (beyond SNAP px)
+   * and swings out like a plucked string. Works with mouse and touch.
    * The line always spans the full page width, wherever it sits.
    */
-  const MAX_BEND = 120;
+  function snapDistance() {
+    return Math.max(90, Math.min(180, window.innerHeight * 0.2));
+  }
 
   function lerp(a, b, t) {
     return a + (b - a) * t;
@@ -27,7 +29,7 @@
     let x = 0.5;
     let time = Math.PI / 2;
     let reqId = null;
-    let lastY = null;
+    let grabbed = false;
 
     let w = 0;
 
@@ -64,30 +66,45 @@
       }
     }
 
-    hit.addEventListener("pointerenter", (e) => {
+    function release() {
+      if (!grabbed) return;
+      grabbed = false;
+      if (!reqId && Math.abs(progress) > 0.75) animateOut();
+    }
+
+    hit.addEventListener("pointerenter", () => {
       if (reqId) {
         cancelAnimationFrame(reqId);
         reqId = null;
         reset();
       }
-      lastY = e.clientY;
+      grabbed = true;
     });
-    hit.addEventListener("pointermove", (e) => {
-      x = Math.min(1, Math.max(0, e.clientX / w));
-      const dy = lastY === null ? 0 : e.clientY - lastY;
-      lastY = e.clientY;
-      progress = Math.max(-MAX_BEND, Math.min(MAX_BEND, progress + dy));
-      setPath(progress);
-    });
-    const release = () => {
-      lastY = null;
-      if (!reqId && Math.abs(progress) > 0.75) animateOut();
-    };
-    hit.addEventListener("pointerleave", release);
-    hit.addEventListener("pointercancel", release);
-    hit.addEventListener("pointerup", (e) => {
-      if (e.pointerType !== "mouse") release();
-    });
+    // While grabbed, the line passes through the pointer (control = 2 × pull)
+    window.addEventListener(
+      "pointermove",
+      (e) => {
+        if (!grabbed) return;
+        const pull = e.clientY - host.getBoundingClientRect().top;
+        x = Math.min(1, Math.max(0, e.clientX / w));
+        if (Math.abs(pull) > snapDistance()) {
+          release();
+          return;
+        }
+        progress = pull * 2;
+        setPath(progress);
+      },
+      { passive: true }
+    );
+    window.addEventListener("pointercancel", release, { passive: true });
+    window.addEventListener(
+      "pointerup",
+      (e) => {
+        if (e.pointerType !== "mouse") release();
+      },
+      { passive: true }
+    );
+    document.addEventListener("pointerleave", release, { passive: true });
 
     const refit = () => {
       fit();
