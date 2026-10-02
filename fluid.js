@@ -43,9 +43,25 @@
       outline: true,
       outlineColor: "#000000",
       outlineWidth: 1, // px
-      msMelt: 1, // reach within which the drop melts into the MS, × drop radius (0 = off)
     },
     window.fluidTune || {}
+  ));
+
+  // How the drop melts into the MS (also read by fieldlines.js)
+  const MT = (window.meltTune = Object.assign(
+    {
+      reach: 0.5, // melting starts this far from a letter, × drop radius (0 = off)
+      overlap: 0.5, // fully melted once it overlaps a letter by this, × drop radius
+      outlineFrom: 0, // progress (0–1) at which the outline starts to hand over …
+      outlineTo: 1, // … and is gone
+      colorFrom: 0, // progress at which the solid colour starts to grow …
+      colorTo: 1, // … and is complete
+      inSpeed: 1, // how fast it melts in (1 = immediately)
+      outSpeed: 1, // how fast the colour drains out again
+      bridge: 1, // size of the bridge drops towards the letter
+      soften: 0.5, // goo blur of the letters while a drop melts in, × MS merge
+    },
+    window.meltTune || {}
   ));
 
   // --- Mode ------------------------------------------------------------------
@@ -480,6 +496,10 @@ void main() {
     }
     return near;
   }
+  function ramp(p, a, b) {
+    if (b <= a) return p >= a ? 1 : 0;
+    return smoothstep(a, b, p);
+  }
   function smoothstep(a, b, x) {
     const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
     return t * t * (3 - 2 * t);
@@ -501,15 +521,27 @@ void main() {
     for (let i = 0; i < n; i++) {
       const d = drops[i];
       const full = R * scale * (1 - T.taper * (n > 1 ? i / (n - 1) : 0));
-      // Starts melting when its edge comes within a radius (× msMelt) of a
-      // letter, fully melted once it overlaps it
-      let m = 0;
-      if (msRects && T.msMelt > 0 && full > 0.3) {
-        const nb = msNear(d.x, d.y);
-        m = 1 - smoothstep(0, full * T.msMelt + 2, nb.d - full * 0.5);
-        if (m > 0.001) melt.push({ x: d.x, y: d.y, r: full * m, m, nx: nb.x, ny: nb.y });
+      // Progress: 0 while the drop's edge is more than `reach` radii from a
+      // letter, 1 once it overlaps it by `overlap` radii; eased in and out
+      // over time. The outline hands over and the solid colour grows on
+      // their own stretches of that progress.
+      let target = 0;
+      let nb = null;
+      if (msRects && MT.reach > 0 && full > 0.3) {
+        nb = msNear(d.x, d.y);
+        target = 1 - smoothstep(-full * MT.overlap, full * MT.reach + 2, nb.d - full);
       }
-      const r = full * (1 - m);
+      const mc = d.melt || 0;
+      d.melt = mc + (target - mc) * Math.min(1, target > mc ? MT.inSpeed : MT.outSpeed);
+      if (d.melt < 0.001) d.melt = 0;
+      const p = d.melt;
+      const line = ramp(p, MT.outlineFrom, MT.outlineTo);
+      const fill = ramp(p, MT.colorFrom, MT.colorTo);
+      if (fill > 0.001) {
+        if (!nb && msRects) nb = msNear(d.x, d.y);
+        if (nb) melt.push({ x: d.x, y: d.y, r: full * fill, m: fill, nx: nb.x, ny: nb.y });
+      }
+      const r = full * (1 - line);
       dropData[i * 4] = d.x;
       dropData[i * 4 + 1] = d.y;
       dropData[i * 4 + 2] = r;

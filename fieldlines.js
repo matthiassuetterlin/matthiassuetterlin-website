@@ -255,7 +255,9 @@
     const melt = window.fxMelt || [];
     let meltMax = 0;
     for (const d of melt) meltMax = Math.max(meltMax, d.m);
-    const sigma = Math.max(lerp(0.9, H * T.merge, Math.pow(cc, 1.15)), lerp(0.9, H * T.merge * 0.5, meltMax));
+    const MT = window.meltTune || {};
+    const soften = MT.soften === undefined ? 0.5 : MT.soften;
+    const sigma = Math.max(lerp(0.9, H * T.merge, Math.pow(cc, 1.15)), lerp(0.9, H * T.merge * soften, meltMax));
     const thr = lerp(0.5, T.mass, cc);
     // Thicken the glyphs as the goo grows so hairlines melt instead of vanishing
     const sw = (sigma * T.thicken).toFixed(2);
@@ -307,7 +309,8 @@
           continue;
         }
         const t = k * 0.36; // 0 = the drop itself, then towards the letter
-        const r = (k ? d.r * (0.62 - 0.12 * k) : d.r) + sigma * 0.9 * d.m;
+        const bridge = MT.bridge === undefined ? 1 : MT.bridge;
+        const r = (k ? d.r * (0.62 - 0.12 * k) * bridge : d.r) + (k && !bridge ? 0 : sigma * 0.9 * d.m);
         node.setAttribute("cx", lerp(d.x, d.nx, t).toFixed(1));
         node.setAttribute("cy", lerp(d.y, d.ny, t).toFixed(1));
         node.setAttribute("r", Math.max(0, r).toFixed(1));
