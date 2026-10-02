@@ -7,10 +7,11 @@
    * content. Crossing a line grabs it; it follows the pointer until it
    * snaps free and swings out like a plucked string.
    *
-   * Text sits on the grid: titles put their baseline on a grid line, finer
-   * text uses a line height that divides the grid evenly. Every letter is
-   * its own span and rides the horizontal lines: a letter on a line moves
-   * exactly with it, one between two lines follows both proportionally.
+   * Text hangs on the grid: main text (titles, project names, tagline)
+   * stands above a grid line with a clear gap, its sub text hangs below the
+   * same line with the same gap. Finer text uses a line height that divides
+   * the grid evenly. Every letter is its own span and rides the horizontal
+   * lines: near a line it moves with it, between two lines proportionally.
    */
   const svg = document.getElementById("bg-grid");
   const letterM = document.getElementById("letter-m");
@@ -19,9 +20,10 @@
   const NS = "http://www.w3.org/2000/svg";
   const root = document.documentElement;
 
-  // Full grid lines for titles, sub-grid (line height) for finer text
-  const SNAP_GRID = ".panel h2, .project-name, .tagline";
-  const SNAP_SUB = ".panel p, .facts li, .local-nav, .project-meta, .home-hint";
+  // Main text stands above a line, sub text hangs below it
+  const MAIN = ".panel h2, .project-name, .tagline";
+  const SUB = ".panel p, .facts li, .local-nav, .project-meta, .home-hint";
+  const CAP = 0.716; // cap height of Helvetica/Arial per em
   const SPLIT = ".panel, .tagline, .home-hint";
 
   let hLines = [];
@@ -31,6 +33,7 @@
   let D = 0; // document height
   let spacing = 70;
   let unit = 35;
+  let gap = 14;
   let ox = 0;
   let oy = 0;
   let snapDist = 90;
@@ -90,34 +93,84 @@
     return y;
   }
 
-  // Snap each container's blocks relative to its first baseline (so centred
-  // layouts don't drift), then move the whole container onto the grid with
-  // relative positioning, which leaves the centring untouched.
+  function lastBaseline(el) {
+    const all = el.querySelectorAll(".gc");
+    const last = all[all.length - 1];
+    if (!last) return null;
+    const probe = document.createElement("span");
+    probe.className = "gp";
+    last.after(probe);
+    const y = probe.getBoundingClientRect().top + window.scrollY;
+    probe.remove();
+    return y;
+  }
+
+  function capOf(el) {
+    return (parseFloat(getComputedStyle(el).fontSize) || 16) * CAP;
+  }
+
+  // Move a block so its first baseline lands on target() (margins zeroed
+  // around snapped blocks, so a margin-top shift is exact). The target is
+  // re-read each time because centred layouts move when a block moves.
+  function placeAt(el, target) {
+    for (let k = 0; k < 4; k++) {
+      const d = target() - baseline(el);
+      if (Math.abs(d) < 0.2) return;
+      const m = parseFloat(el.style.marginTop) || 0;
+      el.style.setProperty("margin-top", `${(m + d).toFixed(2)}px`, "important");
+    }
+  }
+
+  // Lay each container out relative to its first anchor line, then move the
+  // container onto the grid with relative positioning, which leaves the
+  // centring untouched. All positions are kept relative to that anchor.
   function snapText() {
-    const sel = `${SNAP_GRID}, ${SNAP_SUB}`;
+    const sel = `${MAIN}, ${SUB}`;
     for (const box of document.querySelectorAll(".panel, .home-inner")) {
       box.style.removeProperty("top");
-      const blocks = [...box.querySelectorAll(sel)];
-      // Padding, not margin: margins would collapse with their neighbours
-      for (const el of blocks) el.style.removeProperty("padding-top");
-      if (!visible(box)) continue;
-      const first = blocks.find((el) => baseline(el) !== null);
-      if (!first) continue;
+      const blocks = [...box.querySelectorAll(sel)].filter((el) => el.querySelector(".gc"));
       for (const el of blocks) {
-        if (el === first) continue;
-        const b = baseline(el);
-        if (b === null) continue;
-        const step = el.matches(SNAP_GRID) ? spacing : unit;
-        const rel = b - baseline(first);
-        // Next line at or below (1.5 px tolerance for sub-pixel rounding)
-        const delta = Math.ceil((rel - 1.5) / step) * step - rel;
-        if (delta > 0.25) {
-          const pt = parseFloat(getComputedStyle(el).paddingTop) || 0;
-          el.style.setProperty("padding-top", `${(pt + delta).toFixed(2)}px`, "important");
-        }
+        el.style.setProperty("margin-top", "0px", "important");
+        el.style.setProperty("margin-bottom", "0px", "important");
       }
-      const b0 = baseline(first);
-      const shift = oy + Math.round((b0 - oy) / spacing) * spacing - b0;
+      if (!visible(box) || !blocks.length) continue;
+
+      const first = blocks[0];
+      const firstCap = capOf(first);
+      const firstSpan = lastBaseline(first) - baseline(first);
+      // Anchor line of the first block, measured fresh every time
+      const a0 = first.matches(MAIN) ? firstSpan + gap : -firstCap - gap;
+      const A = () => baseline(first) + a0;
+
+      let line = 0; // current anchor line, relative to A
+      let prevEnd = 0; // previous block's last baseline + descent, relative to A
+      let prev = null;
+      for (const el of blocks) {
+        const main = el.matches(MAIN);
+        const cap = capOf(el);
+        const span = lastBaseline(el) - baseline(el);
+        let rel;
+        if (el === first) {
+          rel = -a0;
+        } else if (main) {
+          // Next line with room: the cap top clears the previous block
+          line = Math.max(line + spacing, Math.ceil((prevEnd + gap + cap + span + gap) / spacing) * spacing);
+          rel = line - gap - span;
+        } else if (prev && prev.matches(MAIN)) {
+          rel = line + gap + cap; // hangs from the main text's line
+        } else if (prev && prev.tagName === "LI" && el.tagName === "LI") {
+          rel = prevEnd - cap * 0.3 + unit; // list items follow line by line
+        } else {
+          // New paragraph / group: hang from the next free line
+          line = Math.ceil((prevEnd + gap) / spacing) * spacing;
+          rel = line + gap + cap;
+        }
+        if (el !== first) placeAt(el, () => A() + rel);
+        prevEnd = lastBaseline(el) + cap * 0.3 - A();
+        prev = el;
+      }
+      const a = A();
+      const shift = oy + Math.round((a - oy) / spacing) * spacing - a;
       box.style.position = "relative";
       box.style.top = `${shift.toFixed(2)}px`;
     }
@@ -140,6 +193,7 @@
     // M stem ≈ 0.165 em; the grid runs a little wider
     spacing = Math.max(36, Math.round((fontPx || 350) * 0.2));
     unit = spacing / Math.max(1, Math.round(spacing / 30));
+    gap = Math.max(9, Math.round(spacing * 0.2));
     snapDist = Math.max(40, spacing * 1.4);
     root.style.setProperty("--grid", `${spacing}px`);
     root.style.setProperty("--lh", `${unit}px`);

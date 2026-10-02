@@ -285,7 +285,7 @@ a {
 }
 .facts {
   list-style: none;
-  margin: 0 0 1.75rem;
+  margin: 0; /* spacing comes from the grid (grid.js) */
   padding: 0;
 }
 .facts li {
@@ -314,7 +314,7 @@ a {
 .project-grid {
   display: grid;
   gap: 0;
-  margin-top: 0.5rem;
+  margin: 0;
 }
 .project-card {
   display: grid;
