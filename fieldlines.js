@@ -187,7 +187,7 @@
     const offSx = sep.x + clamp((aim.x - G.s.x) * leanK, -W * 0.12, W * 0.12);
     const offSy = clamp((aim.y - G.s.y) * leanK, -H * 0.1, H * 0.1);
     // Stretch toward each other as they merge
-    const sx = 1 + 0.08 * cc;
+    const sx = 1 + 0.05 * cc;
     tM.setAttribute(
       "transform",
       `translate(${(G.m.x + offMx).toFixed(2)} ${(G.m.y + offMy).toFixed(2)}) scale(${sx.toFixed(3)} 1)`
@@ -202,10 +202,10 @@
     tS.setAttribute("y", "0");
 
     // Goo: blur radius and threshold grow with closeness
-    const sigma = lerp(0.9, H * 0.055, Math.pow(cc, 1.15));
-    const thr = lerp(0.5, 0.36, cc);
+    const sigma = lerp(0.9, H * 0.05, Math.pow(cc, 1.15));
+    const thr = lerp(0.5, 0.43, cc);
     // Thicken the glyphs as the goo grows so hairlines melt instead of vanishing
-    const sw = (sigma * 1.05).toFixed(2);
+    const sw = (sigma * 0.55).toFixed(2);
     tM.setAttribute("stroke-width", sw);
     tS.setAttribute("stroke-width", sw);
     const A = 30;
@@ -221,7 +221,7 @@
     const my = (p0y + p2y) * 0.5;
     const p1x = mx + (aim.x - mx) * 0.6 * cc;
     const p1y = my + (aim.y - my) * 0.6 * cc;
-    const rMax = H * 0.085 * Math.pow(cc, 1.3);
+    const rMax = H * 0.06 * Math.pow(cc, 1.3);
     for (let i = 0; i < CHAIN; i++) {
       const d = drops[i];
       const t = (i + 0.5) / CHAIN;
@@ -255,7 +255,7 @@
       const k = 0.05 + 0.02 * j;
       d.x = lerp(d.x, x, k);
       d.y = lerp(d.y, y, k);
-      const r = H * 0.06 * Math.pow(cc, 1.5) * (1 - 0.18 * j);
+      const r = H * 0.045 * Math.pow(cc, 1.5) * (1 - 0.18 * j);
       d.node.setAttribute("cx", d.x.toFixed(1));
       d.node.setAttribute("cy", d.y.toFixed(1));
       d.node.setAttribute("r", Math.max(0, r).toFixed(1));
