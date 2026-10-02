@@ -35,7 +35,12 @@
   const filter = el("filter", { id: "ms-goo-f", filterUnits: "userSpaceOnUse", "color-interpolation-filters": "sRGB" }, defs);
   const blur = el("feGaussianBlur", { in: "SourceGraphic", stdDeviation: "1", result: "blur" }, filter);
   const matrix = el("feColorMatrix", { in: "blur", type: "matrix", values: "" }, filter);
-  const goo = el("g", { filter: "url(#ms-goo-f)", fill: "#000" }, svg);
+  // Mask keeps the S's lower counter open while everything melts
+  const mask = el("mask", { id: "ms-goo-m", maskUnits: "userSpaceOnUse" }, defs);
+  const maskBg = el("rect", { fill: "#fff" }, mask);
+  const hole = el("circle", { fill: "#000", r: "0" }, mask);
+  const gooOuter = el("g", { filter: "url(#ms-goo-f)", fill: "#000" }, svg);
+  const goo = el("g", { mask: "url(#ms-goo-m)" }, gooOuter);
   const textAttrs = {
     "font-family": FONT_FAMILY,
     "font-weight": "700",
@@ -90,6 +95,10 @@
     cssW = Math.max(2, window.innerWidth | 0);
     cssH = Math.max(2, window.innerHeight | 0);
     svg.setAttribute("viewBox", `0 0 ${cssW} ${cssH}`);
+    for (const [k, v] of [["x", 0], ["y", 0], ["width", cssW], ["height", cssH]]) {
+      mask.setAttribute(k, v);
+      maskBg.setAttribute(k, v);
+    }
     const [rm, rs] = readRects();
     if (rm.width < 2 || rs.width < 2) {
       geo = null;
@@ -113,6 +122,7 @@
     filter.setAttribute("width", (rs.right - rm.left + pad * 2).toFixed(1));
     filter.setAttribute("height", (H * 2.8).toFixed(1));
     geo = {
+      fontPx,
       m,
       s,
       H,
@@ -187,7 +197,7 @@
     const offSx = sep.x + clamp((aim.x - G.s.x) * leanK, -W * 0.12, W * 0.12);
     const offSy = clamp((aim.y - G.s.y) * leanK, -H * 0.1, H * 0.1);
     // Stretch toward each other as they merge
-    const sx = 1 + 0.08 * cc;
+    const sx = 1 + 0.05 * cc;
     tM.setAttribute(
       "transform",
       `translate(${(G.m.x + offMx).toFixed(2)} ${(G.m.y + offMy).toFixed(2)}) scale(${sx.toFixed(3)} 1)`
@@ -201,14 +211,19 @@
     tS.setAttribute("x", "0");
     tS.setAttribute("y", "0");
 
+    // Lower counter of the S (Playfair 700), opened up as the letters merge
+    hole.setAttribute("cx", (G.s.x + offSx + G.fontPx * 0.06 * sx).toFixed(1));
+    hole.setAttribute("cy", (G.s.y + offSy + G.fontPx * 0.12).toFixed(1));
+    hole.setAttribute("r", (G.fontPx * 0.06 * Math.pow(cc, 0.8)).toFixed(1));
+
     // Goo: blur radius and threshold grow with closeness
-    const sigma = lerp(0.9, H * 0.055, Math.pow(cc, 1.15));
-    const thr = lerp(0.5, 0.36, cc);
+    const sigma = lerp(0.9, H * 0.05, Math.pow(cc, 1.15));
+    const thr = lerp(0.5, 0.4, cc);
     // Thicken the glyphs as the goo grows so hairlines melt instead of vanishing
-    const sw = (sigma * 1.05).toFixed(2);
+    const sw = (sigma * 0.8).toFixed(2);
     tM.setAttribute("stroke-width", sw);
     tS.setAttribute("stroke-width", sw);
-    const A = 30;
+    const A = 50;
     blur.setAttribute("stdDeviation", sigma.toFixed(2));
     matrix.setAttribute("values", `0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 ${A} ${(-A * thr).toFixed(2)}`);
 
@@ -221,7 +236,7 @@
     const my = (p0y + p2y) * 0.5;
     const p1x = mx + (aim.x - mx) * 0.6 * cc;
     const p1y = my + (aim.y - my) * 0.6 * cc;
-    const rMax = H * 0.085 * Math.pow(cc, 1.3);
+    const rMax = H * 0.07 * Math.pow(cc, 1.3);
     for (let i = 0; i < CHAIN; i++) {
       const d = drops[i];
       const t = (i + 0.5) / CHAIN;
@@ -255,7 +270,7 @@
       const k = 0.05 + 0.02 * j;
       d.x = lerp(d.x, x, k);
       d.y = lerp(d.y, y, k);
-      const r = H * 0.06 * Math.pow(cc, 1.5) * (1 - 0.18 * j);
+      const r = H * 0.045 * Math.pow(cc, 1.5) * (1 - 0.18 * j);
       d.node.setAttribute("cx", d.x.toFixed(1));
       d.node.setAttribute("cy", d.y.toFixed(1));
       d.node.setAttribute("r", Math.max(0, r).toFixed(1));

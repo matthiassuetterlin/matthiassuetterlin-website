@@ -14,6 +14,7 @@ html, body {
   color: var(--ink);
   font-family: Helvetica, "Helvetica Neue", Arial, sans-serif;
 }
+body { overflow-x: clip; } /* full-width lines never cause sideways scroll */
 
 button {
   font: inherit;
@@ -206,6 +207,55 @@ a {
   padding-bottom: 0.08em;
 }
 .text-link:hover { opacity: 0.55; }
+
+/* Pluckable lines (string.js) */
+.string {
+  position: relative;
+  width: 100%;
+  height: 1px;
+  margin: 1.25rem 0 1.75rem;
+}
+.string svg {
+  position: absolute;
+  left: 0;
+  top: -250px;
+  width: 100vw;
+  height: 500px;
+  overflow: visible;
+  pointer-events: none;
+}
+.string path {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+.string-hit {
+  position: absolute;
+  left: 0;
+  width: 100vw;
+  top: -20px;
+  height: 40px;
+  z-index: 1;
+  touch-action: none;
+}
+/* Tagline sits on one pluckable line instead of two underlines */
+.tagline-wrap {
+  position: relative;
+  z-index: 4;
+  width: max-content;
+  max-width: 100%;
+  margin: 1.5rem auto 0;
+}
+.tagline-wrap .tagline {
+  margin: 0;
+  justify-content: center;
+}
+.tagline-wrap .text-link {
+  border-bottom: 0;
+}
+.home-inner .string-home {
+  margin: 0.6rem 0 0;
+}
 
 .home-hint {
   margin: 2.5rem 0 0;
