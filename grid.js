@@ -10,9 +10,9 @@
    * The lines themselves are invisible: only their crossings are drawn, as
    * tiny squares that ride both lines. As soon as one moves it grows and
    * its corners round into a squircle (superellipse |x|^n + |y|^n = 1,
-   * n from ~30 down to 4) — and fades: the bigger it gets, the lighter its
-   * grey, up to white, so right at the pointer it disappears and shows up
-   * again as it swings out and shrinks. Moving dots sit under a goo filter
+   * n from ~30 down to 4). Its grey follows an arc over its size: light
+   * grey at rest, darkest at mid size (swinging out, melting), fading to
+   * white at full size — so right at the pointer it disappears. Moving dots sit under a goo filter
    * like the MS, so when they come close they melt into each other.
    * Settling, they shrink and sharpen back into tiny grey squares.
    *
@@ -253,7 +253,7 @@
     svg.style.height = `${D}px`;
     svg.textContent = "";
     dots = [];
-    dotHalf = Math.max(0.75, spacing * 0.014);
+    dotHalf = Math.max(1, spacing * 0.014); // ≥ 2 px, also on phones
     dotMax = Math.max(5, spacing * 0.16);
     // Resting dots stay crisp; moving ones go into the goo group
     const defs = document.createElementNS(NS, "defs");
@@ -307,6 +307,8 @@
   // exponent n, drawn as a closed polygon fine enough for a few pixels
   const SEG = 32;
   const REST_GREY = 150; // ≈ 40 % black on white
+  const PEAK_GREY = 115; // ≈ 55 % — most visible while swinging out
+  const PEAK_AT = 0.35; // share of the full size where it is darkest
   const COS = [];
   const SIN = [];
   for (let k = 0; k < SEG; k++) {
@@ -321,9 +323,17 @@
     d.y = y;
     d.n = n;
     d.a = a;
-    // Bigger → lighter: grey at rest, white (invisible) at full size
+    // Visibility arc: rest grey → darkest at mid size → white at full size
     const grow = (a - dotHalf) / (dotMax - dotHalf);
-    const grey = Math.round(REST_GREY + (255 - REST_GREY) * Math.pow(grow, 0.8));
+    let grey;
+    if (grow <= PEAK_AT) {
+      const t = grow / PEAK_AT;
+      grey = REST_GREY + (PEAK_GREY - REST_GREY) * t * t * (3 - 2 * t);
+    } else {
+      const t = (grow - PEAK_AT) / (1 - PEAK_AT);
+      grey = PEAK_GREY + (255 - PEAK_GREY) * t * t * (3 - 2 * t);
+    }
+    grey = Math.round(grey);
     if (grey !== d.grey) {
       d.el.setAttribute("fill", `rgb(${grey},${grey},${grey})`);
       d.grey = grey;
