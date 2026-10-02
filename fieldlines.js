@@ -23,9 +23,9 @@
   // Tunable parameters (adjusted live by the settings menu, tune.js)
   const T = (window.msTune = Object.assign(
     {
-      weight: 700, // Playfair weight 400–900
+      weight: 600, // Playfair weight 400–900
       color: "#000000",
-      merge: 0.05, // goo blur at the centre, × letter height
+      merge: 0.085, // goo blur at the centre, × letter height
       thicken: 0.8, // stroke that keeps hairlines while merging, × blur
       mass: 0.4, // alpha threshold at the centre (lower = more mass)
       drops: 0.07, // droplet chain size, × letter height

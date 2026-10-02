@@ -32,25 +32,25 @@
     {
       spacing: 0.2, // grid step, × MS font size (rebuilds the layout)
       restSize: 2, // dot size at rest, px
-      maxSize: 0.32, // dot size in full motion, × grid step
-      catchR: 1.5, // pointer catches dots within this many grid steps
-      leash: 2.4, // caught dots let go beyond this many grid steps
-      pullNear: 0.9, // share of the way the nearest dots follow the pointer
-      pullFar: 0.3, // … and the farthest caught ones
+      maxSize: 0.75, // dot size in full motion, × grid step
+      catchR: 1.1, // pointer catches dots within this many grid steps
+      leash: 4.4, // caught dots let go beyond this many grid steps
+      pullNear: 0.25, // share of the way the nearest dots follow the pointer
+      pullFar: 0.5, // … and the farthest caught ones
       follow: 0.2, // spring stiffness while caught
-      spring: 0.07, // spring stiffness on the way home
-      wobble: 0.86, // damping on the way home (higher = more overshoot)
-      roundness: 4, // superellipse exponent in full motion (2 = circle)
-      restColor: "#969696",
-      peakColor: "#737373",
+      spring: 0.025, // spring stiffness on the way home
+      wobble: 0.5, // damping on the way home (higher = more overshoot)
+      roundness: 12, // superellipse exponent in full motion (2 = circle)
+      restColor: "#ffffff",
+      peakColor: "#ffffff",
       fadeColor: "#ffffff",
-      peakAt: 0.35, // share of the full size where the dot is darkest
-      goo: 0.45, // blur that melts dots together, × max size
+      peakAt: 0.05, // share of the full size where the dot is darkest
+      goo: 1, // blur that melts dots together, × max size
       outline: true,
-      outlineColor: "#737373",
-      outlineWidth: 1, // px-ish
-      outlineFrom: 0.6, // fill lightness from which the outline appears
-      textFollow: 0.6, // how much the text follows the dots' vertical shift
+      outlineColor: "#2b2b2b",
+      outlineWidth: 0.3, // px-ish
+      outlineFrom: 0, // fill lightness from which the outline appears
+      textFollow: 0.45, // how much the text follows the dots' vertical shift
     },
     window.gridTune || {}
   ));
@@ -411,8 +411,9 @@
       d.el.setAttribute("fill", fill);
       d.grey = fill;
     }
-    // Big enough to survive the goo threshold → melt with neighbours
-    const goo = a > dotHalf * 3;
+    // Big enough for a clean contour under the goo blur → melt with
+    // neighbours (smaller dots under a strong blur would smear)
+    const goo = a > Math.max(dotHalf * 3, dotMax * T.goo * 0.9);
     if (goo !== d.inGoo) {
       (goo ? gooG : crisp).appendChild(d.el);
       d.inGoo = goo;
