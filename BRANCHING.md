@@ -4,7 +4,9 @@
 
 ## Reference
 
-- **Current default / v2:** commit `838faa7` — capped max-merge, readable MS snake, no cursor blot.
+- **Current default / v3:** `main` since PR #2 (`arty-whole-body`, commit `64de42a`) — dual magnetic fluids:
+  M and S melt together as the cursor approaches (whole-body attraction).
+- **v2:** commit `838faa7` — capped max-merge, readable MS snake, no cursor blot.
   - Tags: `v2-max-merge` / `reference/max-merge-snake`
   - Branch pin: `reference/v2-max-merge`
 - **v1:** commit `05a8cd0` (solid MS, centered, outward stretch).
