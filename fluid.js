@@ -20,16 +20,17 @@
   const root = document.documentElement;
   const stage = document.getElementById("stage");
   const letterM = document.getElementById("letter-m");
+  const letterS = document.getElementById("letter-s");
   const MODE_KEY = "ms-fx-mode";
   const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;
 
   const T = (window.fluidTune = Object.assign(
     {
-      size: 0.12, // drop radius, × MS font size
-      rest: 0.4, // size while the pointer rests, share of the full size
-      count: 6, // drops in the chain
+      size: 0.05, // drop radius, × MS font size
+      rest: 0.2, // size while the pointer rests, share of the full size
+      count: 5, // drops in the chain
       taper: 0.7, // how much smaller the last drop is than the first
-      follow: 0.29, // spring stiffness of the chain
+      follow: 0.21, // spring stiffness of the chain
       wobble: 0.4, // damping (higher = more overshoot)
       merge: 3, // smooth-minimum radius, × drop radius
       decay: 0.995, // how slowly the drop shrinks back after a move
@@ -42,6 +43,7 @@
       outline: true,
       outlineColor: "#000000",
       outlineWidth: 1, // px
+      msMelt: 1, // reach within which the drop melts into the MS, × drop radius (0 = off)
     },
     window.fluidTune || {}
   ));
@@ -429,8 +431,67 @@ void main() {
     return moving;
   }
 
+  // --- Melting into the MS --------------------------------------------------------
+  // Near the M or the S a drop hands its mass over to the MS goo
+  // (fieldlines.js reads window.fxMelt): its outline shape shrinks while a
+  // solid drop of the same size grows inside the goo and melts with the
+  // letters. Moving away reverses it.
+  const melt = [];
+  window.fxMelt = melt;
+  let msRects = null;
+  let msAge = 99;
+  // Ink boxes of the drawn M and S. fieldlines.js centres each glyph on
+  // its button (plus 0.03 em) with dominant-baseline "middle", i.e. the
+  // baseline sits half an x-height below that centre.
+  const inkCtx = document.createElement("canvas").getContext("2d");
+  function readMs() {
+    msRects = null;
+    if (!letterM || !letterS) return;
+    const boxes = [];
+    for (const [btn, ch] of [[letterM, "M"], [letterS, "S"]]) {
+      const r = btn.getBoundingClientRect();
+      if (r.width < 2) return;
+      const fs = parseFloat(getComputedStyle(btn).fontSize) || r.height;
+      const weight = (window.msTune && window.msTune.weight) || 700;
+      inkCtx.font = `${weight} ${fs}px "Playfair Display", "Times New Roman", serif`;
+      const g = inkCtx.measureText(ch);
+      const xh = inkCtx.measureText("x").actualBoundingBoxAscent || fs * 0.5;
+      const cx = r.left + r.width / 2;
+      const base = r.top + r.height / 2 + fs * 0.03 + xh / 2;
+      const w = (g.actualBoundingBoxLeft + g.actualBoundingBoxRight) || fs * 0.7;
+      boxes.push({ left: cx - w / 2, right: cx + w / 2, top: base - (g.actualBoundingBoxAscent || fs * 0.7), bottom: base + (g.actualBoundingBoxDescent || 0) });
+    }
+    msRects = boxes;
+  }
+  window.fxMsBoxes = () => msRects; // for checks
+  // Distance to the nearer letter and the closest point on it
+  const near = { d: 0, x: 0, y: 0 };
+  function msNear(x, y) {
+    near.d = Infinity;
+    for (const r of msRects) {
+      const nx = Math.min(r.right, Math.max(r.left, x));
+      const ny = Math.min(r.bottom, Math.max(r.top, y));
+      const d = Math.hypot(x - nx, y - ny);
+      if (d < near.d) {
+        near.d = d;
+        near.x = nx;
+        near.y = ny;
+      }
+    }
+    return near;
+  }
+  function smoothstep(a, b, x) {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  }
+
   const dropData = new Float32Array(MAX * 4);
   function draw() {
+    if (++msAge > 20) {
+      msAge = 0;
+      readMs();
+    }
+    melt.length = 0;
     const scale = presence * (T.rest + (1 - T.rest) * Math.min(1, energy));
     const n = drops.length;
     let x0 = Infinity;
@@ -439,7 +500,16 @@ void main() {
     let y1 = -Infinity;
     for (let i = 0; i < n; i++) {
       const d = drops[i];
-      const r = R * scale * (1 - T.taper * (n > 1 ? i / (n - 1) : 0));
+      const full = R * scale * (1 - T.taper * (n > 1 ? i / (n - 1) : 0));
+      // Starts melting when its edge comes within a radius (× msMelt) of a
+      // letter, fully melted once it overlaps it
+      let m = 0;
+      if (msRects && T.msMelt > 0 && full > 0.3) {
+        const nb = msNear(d.x, d.y);
+        m = 1 - smoothstep(0, full * T.msMelt + 2, nb.d - full * 0.5);
+        if (m > 0.001) melt.push({ x: d.x, y: d.y, r: full * m, m, nx: nb.x, ny: nb.y });
+      }
+      const r = full * (1 - m);
       dropData[i * 4] = d.x;
       dropData[i * 4 + 1] = d.y;
       dropData[i * 4 + 2] = r;
@@ -490,6 +560,7 @@ void main() {
     raf = null;
     if (mode !== "fluid") {
       lastT = 0;
+      melt.length = 0;
       if (shown) {
         gl.disable(gl.SCISSOR_TEST);
         gl.clear(gl.COLOR_BUFFER_BIT);
@@ -555,6 +626,7 @@ void main() {
     { passive: true }
   );
   window.addEventListener("resize", () => {
+    msAge = 99;
     resize();
     kick();
   });
