@@ -201,10 +201,6 @@ a {
   color: transparent;
 }
 
-.ms-crisp {
-  pointer-events: none;
-  transition: opacity 0.05s linear;
-}
 
 .tagline {
   margin: 1.5rem 0 0;
