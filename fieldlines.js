@@ -1,16 +1,16 @@
 (() => {
   /**
-   * Elastic M/S: each letter is its own deformable body.
+   * M/S with a liquid bridge.
    *
-   * Every glyph is turned into a signed distance field of its real Playfair
-   * contour. Per frame the page pixels are pulled back through an elastic
-   * displacement field and both fields are combined with a small smooth-min,
-   * so the letters themselves stretch, lean and bulge — and only fuse where
-   * their contours actually come close. No overlay, no blur layer.
+   * Each glyph is a signed distance field of its real Playfair contour, so the
+   * letters stay crisp and intact. Between them a viscous neck is drawn out of
+   * the facing contours: a smooth-min with the letters gives it concave,
+   * trumpet-like flares; pulled further it thins, beads into drops and its
+   * edge starts to ripple like ink. M and S never fuse directly.
    *
-   * Interaction: entering the middle between M and S grabs the pair. Moving
-   * left drags M along and S follows behind (and vice versa); the facing
-   * sides reach for each other under tension. Leaving the zone lets go.
+   * Interaction: approaching the middle lets the bridge reach out; entering it
+   * grabs the pair. Moving left drags M along and S follows behind (and vice
+   * versa), stretching the neck. Leaving the zone lets go.
    */
   const canvas = document.getElementById("ms-canvas");
   const letterM = document.getElementById("letter-m");
@@ -46,7 +46,7 @@
   const uTrail = { x: 0, v: 0 };
   const vLead = { x: 0, v: 0 };
   const vTrail = { x: 0, v: 0 };
-  const grabY = { x: 0, v: 0 };
+  const grabY = { x: NaN, v: 0 };
 
   function clamp(v, a, b) {
     return v < a ? a : v > b ? b : v;
@@ -234,7 +234,7 @@
     const sR = S.box.r;
     const midX = (mR + sL) * 0.5;
     const midY = (Math.min(M.box.t, S.box.t) + Math.max(M.box.b, S.box.b)) * 0.5;
-    const Umax = W * 0.5;
+    const Umax = W * 0.75;
     const Vmax = H * 0.3;
 
     // Render region: both glyph fields plus the furthest drag
@@ -283,6 +283,21 @@
     );
   }
 
+  // First x (stepping from x0 toward x1) where the glyph is solid at row y
+  function contourX(G, y, x0, x1) {
+    const dir = x1 > x0 ? 1 : -1;
+    let x = x0;
+    for (let i = 0; i < 400; i++) {
+      const d = sample(G, x, y);
+      if (d <= 0) return x;
+      // Distance field lets us jump safely
+      const step = Math.max(0.5, d);
+      x += dir * step;
+      if ((x - x1) * dir > 0) break;
+    }
+    return (G.box.l + G.box.r) * 0.5;
+  }
+
   // --- Frame --------------------------------------------------------------
 
   function frame(now) {
@@ -310,9 +325,9 @@
     const W = G.W;
 
     // Interaction targets
-    let eT;
-    let uT;
-    let vT;
+    let eT = 0;
+    let uT = 0;
+    let vT = 0;
     let gyT = G.midY;
     if (mouse.active) {
       const dx = mouse.x - G.midX;
@@ -326,83 +341,139 @@
       if (ex * ey < 0.02) latched = false;
       if (latched) {
         eT = ex * ey;
-        gyT = clamp(mouse.y, G.midY - H * 0.5, G.midY + H * 0.5);
+        gyT = clamp(mouse.y, G.midY - H * 0.28, G.midY + H * 0.28);
         uT = G.Umax * Math.tanh(dx / G.Umax) * eT;
         vT = G.Vmax * 0.45 * Math.tanh(dy / G.Vmax) * eT;
       } else {
-        // Approaching the pair: faint pre-attraction, no drag yet
-        eT = 0.35 * ey * (1 - smoothstep(0, hx, Math.abs(dx)));
-        uT = 0;
-        vT = 0;
+        // Approaching the middle: the bridge starts to reach out
+        eT = 0.45 * ey * (1 - smoothstep(0, hx, Math.abs(dx)));
       }
     } else {
       latched = false;
-      eT = 0.18 + 0.07 * Math.sin(time * 0.6);
-      uT = Math.sin(time * 0.4) * W * 0.02;
-      vT = 0;
     }
 
-    // Leading side follows fast, trailing side lags — elastic stretch
+    // Leading letter follows fast, the other one is dragged behind
     spring(eng, eT, 0.08, 0.82);
     spring(uLead, uT, 0.14, 0.8);
-    spring(uTrail, uT, 0.055, 0.86);
+    spring(uTrail, uT, 0.05, 0.87);
     spring(vLead, vT, 0.14, 0.8);
-    spring(vTrail, vT, 0.055, 0.86);
+    spring(vTrail, vT, 0.05, 0.87);
+    if (grabY.x !== grabY.x) grabY.x = G.midY;
     spring(grabY, gyT, 0.1, 0.8);
 
     const e = clamp(eng.x, 0, 1);
-    const pull = Math.abs(uLead.x);
-    // Neck: a narrow, horizontally reaching lobe at mid-height on each facing side
-    const sigX = H * 0.3;
-    const sigY = H * 0.2;
-    const invX = 1 / (2 * sigX * sigX);
-    const invY = 1 / (2 * sigY * sigY);
-    const bulge = Math.min(sigX * 0.5, e * H * 0.08 + pull * 0.15 * e);
-    // Fuse only where the reaching contours actually meet — kept small
-    const kMerge = Math.max(0.001, Math.min(H * 0.07, e * H * 0.03 + pull * 0.05 * e));
-    const lean = e * H * 0.025;
-    const lam = 0.5 + 0.5 * Math.tanh(uLead.x / 15);
-    const span = Math.max(1, G.sR - G.mL);
-    const gapC = G.midX;
-    const sigW = H * 0.16;
-    const cMx = G.mR - W * 0.12;
-    const cSx = G.sL + W * 0.12;
-    const cY = G.midY + H * 0.05;
-    const TRAIL = 0.15;
-    const uL = uLead.x;
-    const uTr = uTrail.x * TRAIL;
-    const vL = vLead.x;
-    const vTr = vTrail.x * TRAIL;
-    // Rows near the grab height are dragged hardest — the bodies bend
-    const gY = grabY.x;
-    const invBend = 1 / (2 * (H * 0.55) * (H * 0.55));
+    const TRAIL = 0.4;
+    const lam = 0.5 + 0.5 * Math.tanh(uLead.x / 15); // 0: dragging left, 1: right
+    const offM = lerp(uLead.x, uTrail.x * TRAIL, lam);
+    const offS = lerp(uTrail.x * TRAIL, uLead.x, lam);
+    const offMy = lerp(vLead.x, vTrail.x * TRAIL, lam) * 0.5;
+    const offSy = lerp(vTrail.x * TRAIL, vLead.x, lam) * 0.5;
     const M = G.M;
     const S = G.S;
-    const mL = G.mL;
+
+    // Bridge anchors: the facing contours at grab height, slightly inside
+    const gy = grabY.x;
+    const inset = H * 0.03;
+    const axR = contourX(M, gy, M.box.r, M.box.l);
+    const sy = gy;
+    const bxR = contourX(S, sy, S.box.l, S.box.r);
+    const Ax = axR - inset + offM;
+    const Ay = gy + offMy;
+    const Bx = bxR + inset + offS;
+    const By = sy + offSy;
+    const L0 = Math.max(1, bxR - axR + inset * 2);
+    const L = Math.hypot(Bx - Ax, By - Ay);
+    // Stretch: the neck thins as it is pulled out (volume stays roughly constant)
+    const tau = clamp((L - L0) / (H * 0.7), 0, 1);
+    const bridgeOn = e > 0.02;
+    // Hourglass profile: wide concave flares at the letters, thin waist between
+    const r = e * H * 0.035 * (1 - 0.6 * tau);
+    const rA = e * H * 0.3 * (1 - 0.25 * tau);
+    const rB = e * H * 0.19 * (1 - 0.25 * tau);
+    // Meniscus flare where the neck meets each letter — scales with the span
+    const kFlare = Math.max(0.001, e * H * 0.07);
+    const flareS = 1 / (2 * Math.pow(H * 0.35, 2));
+    const nearLim = H * 0.45;
+    let nearB = false;
+    const Cx = (Ax + Bx) * 0.5;
+    const Cy = (Ay + By) * 0.5 + vLead.x * 0.25 + H * 0.05 * tau;
+    // Beading under tension (Plateau–Rayleigh): drops along the thinning neck
+    const bead = r * 2.1 * smoothstep(0.3, 0.75, tau);
+    const kBead = H * 0.04 * e;
+    const b1x = lerp(Ax, Bx, 0.36);
+    const b1y = lerp(Ay, Cy, 0.72) + bead * 0.3;
+    const b2x = lerp(Ax, Bx, 0.63);
+    const b2y = lerp(Cy, By, 0.26) + bead * 0.5;
+    // Ink ripple, only on the bridge surface
+    const ripple = e * H * (0.004 + 0.01 * tau);
+    const rippleS = 1 / (2 * Math.pow(H * 0.08, 2));
+    const fq = 9 / H;
+
+    // Bounding box outside which the bridge cannot change the shape
+    const margin = Math.max(rA, rB) + kFlare + bead * 2 + ripple + 2;
+    const bx0 = Math.min(Ax, Bx) - margin;
+    const bx1 = Math.max(Ax, Bx) + margin;
+    const by0 = Math.min(Ay, By, Cy) - margin;
+    const by1 = Math.max(Ay, By, Cy) + margin;
+
+    function segDist(px, py, x0, y0, x1, y1, t0, t1) {
+      const vx = x1 - x0;
+      const vy = y1 - y0;
+      const wx = px - x0;
+      const wy = py - y0;
+      const l2 = vx * vx + vy * vy || 1;
+      const t = clamp((wx * vx + wy * vy) / l2, 0, 1);
+      const dx = wx - vx * t;
+      const dy = wy - vy * t;
+      const tg = lerp(t0, t1, t);
+      const u = Math.abs(tg - 0.5) * 2; // 0 at waist, 1 at letters
+      const rEnd = tg < 0.5 ? rA : rB;
+      return Math.sqrt(dx * dx + dy * dy) - (r + (rEnd - r) * u * u * u);
+    }
+
+    function smin(a, b, k) {
+      const h = k - Math.abs(a - b);
+      if (h <= 0) return a < b ? a : b;
+      return (a < b ? a : b) - (h * h) / (4 * k);
+    }
 
     function field(x, y) {
-      // Chain displacement along the pair (0 = left end, 1 = right end)
-      const lin = clamp((x - mL) / span, 0, 1);
-      const sig = 1 / (1 + Math.exp(-(x - gapC) / sigW));
-      const h = 0.35 * lin + 0.65 * sig;
-      const g = lerp(1 - h, h, lam);
-      const by = y - gY;
-      const bend = 0.55 + 0.45 * Math.exp(-by * by * invBend);
-      const qx = x - lerp(uTr, uL, g) * bend;
-      const qy = y - lerp(vTr, vL, g);
-      // Facing-side necks, evaluated in rest coordinates
-      const dmx = qx - cMx;
-      const dmy = qy - cY;
-      const ny = Math.exp(-dmy * dmy * invY);
-      const bm = bulge * ny * Math.exp(-dmx * dmx * invX);
-      const dsx = qx - cSx;
-      const bs = bulge * ny * Math.exp(-dsx * dsx * invX);
-      const a = sample(M, qx - bm - lean, qy);
-      const b = sample(S, qx + bs + lean, qy);
-      // Polynomial smooth-min: fuse only where contours come within kMerge
-      const hh = kMerge - Math.abs(a - b);
-      if (hh <= 0) return a < b ? a : b;
-      return (a < b ? a : b) - (hh * hh) / (4 * kMerge);
+      const dM = sample(M, x - offM, y - offMy);
+      const dS = sample(S, x - offS, y - offSy);
+      nearB = false;
+      if (!bridgeOn || x < bx0 || x > bx1 || y < by0 || y > by1) return dM < dS ? dM : dS;
+      let dn = Math.min(
+        segDist(x, y, Ax, Ay, Cx, Cy, 0, 0.5),
+        segDist(x, y, Cx, Cy, Bx, By, 0.5, 1)
+      );
+      // Cut the wide M end flat inside the stem so it never shows behind it
+      const ex0 = Ax - x;
+      if (ex0 > dn) dn = ex0;
+      nearB = dn < nearLim;
+      if (bead > 0.3) {
+        const d1 = Math.hypot(x - b1x, y - b1y) - bead;
+        const d2 = Math.hypot(x - b2x, y - b2y) - bead * 0.8;
+        dn = smin(dn, Math.min(d1, d2), kBead);
+      }
+      // Letters never fuse directly — only through the bridge
+      const ax = x - Ax;
+      const ay = y - Ay;
+      const bx = x - Bx;
+      const by = y - By;
+      let a = dM < dn ? dM : dn;
+      let b = dS < dn ? dS : dn;
+      if (Math.abs(dM - dn) < kFlare) a = smin(dM, dn, kFlare * Math.exp(-(ax * ax + ay * ay) * flareS) + 0.001);
+      if (Math.abs(dS - dn) < kFlare) b = smin(dS, dn, kFlare * Math.exp(-(bx * bx + by * by) * flareS) + 0.001);
+      let d = a < b ? a : b;
+      const w = Math.exp(-dn * dn * rippleS);
+      if (w > 0.02) {
+        d +=
+          ripple *
+          w *
+          Math.sin(x * fq + time * 1.3 + Math.sin(y * fq * 1.7 - time * 0.9) * 1.6) *
+          Math.sin(y * fq * 1.3 - time * 0.7);
+      }
+      return d;
     }
 
     const R = G.region;
@@ -412,7 +483,8 @@
     const bh = R.bh;
     buf.fill(0);
     const invQ = 1 / q;
-    const tileRad = ((TILE * 0.7072) / q) * 3 + invQ;
+    const tileRad = ((TILE * 0.7072) / q) * 4 + invQ + H * 0.03;
+    const eps = 0.5 * invQ;
     const SOLID = 0xff000000 | 0;
 
     for (let ty = 0; ty < bh; ty += TILE) {
@@ -429,7 +501,16 @@
           const cy = R.y + (py + 0.5) * invQ;
           let i = py * bw + tx;
           for (let px = tx; px < tx1; px++, i++) {
-            const d = field(R.x + (px + 0.5) * invQ, cy);
+            const cx = R.x + (px + 0.5) * invQ;
+            let d = field(cx, cy);
+            if (d * q > 3) continue;
+            if (nearB && d * q > -3) {
+              // Normalise by the local slope so flares and drops stay crisp
+              const gx = field(cx + eps, cy) - d;
+              const gy = field(cx, cy + eps) - d;
+              const gl = Math.sqrt(gx * gx + gy * gy) / eps;
+              if (gl > 0.05) d /= gl;
+            }
             const t = 0.5 - d * q;
             if (t <= 0) continue;
             buf[i] = t >= 1 ? SOLID : ((t * 255) | 0) << 24;
