@@ -25,17 +25,17 @@
     {
       weight: 600, // Playfair weight 400–900
       color: "#000000",
-      merge: 0.085, // goo blur at the centre, × letter height
-      thicken: 0.8, // stroke that keeps hairlines while merging, × blur
-      mass: 0.4, // alpha threshold at the centre (lower = more mass)
-      drops: 0.07, // droplet chain size, × letter height
-      satellites: 0.045, // droplets drawn towards the pointer, × letter height
-      pull: 1, // how far M and S are drawn together at the centre
+      merge: 0.08, // goo blur at the centre, × letter height
+      thicken: 1.05, // stroke that keeps hairlines while merging, × blur
+      mass: 0.39, // alpha threshold at the centre (lower = more mass)
+      drops: 0.15, // droplet chain size, × letter height
+      satellites: 0.04, // droplets drawn towards the pointer, × letter height
+      pull: 0.45, // how far M and S are drawn together at the centre
       spread: 0.04, // gap away from the centre, × letter width
       reach: 1, // radius of the pointer's influence
-      hole: 0.06, // hole in the S, × font size
-      lean: 0.07, // lean of both letters towards the pointer
-      stretch: 0.05, // horizontal stretch while merging
+      hole: 0.085, // hole in the S, × font size
+      lean: 0.2, // lean of both letters towards the pointer
+      stretch: 0.2, // horizontal stretch while merging
     },
     window.msTune || {}
   ));

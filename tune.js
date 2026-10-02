@@ -5,8 +5,8 @@
    * (window.gridTune, grid.js). Values apply live. Settings can be stored
    * as numbered saves ("Speicherung 01", 02, …): load by clicking, delete
    * with ×, and tick one as the default that loads on every visit. Saves
-   * 01 and 02 ship with the site; further saves and the default tick live
-   * in this browser (localStorage). "Werte kopieren" copies the current
+   * 01 (the earlier look) and 02 (the code defaults) ship with the site;
+   * further saves and the default tick live in this browser (localStorage). "Werte kopieren" copies the current
    * values as JSON to share.
    */
   const MS = window.msTune;
@@ -15,37 +15,36 @@
   const STORE = "ms-tune-saves-v1";
   const DEFAULTS = { ms: { ...MS }, grid: { ...GRID } };
 
-  // Saves that ship with the site: 01 = the code defaults, 02 = a second look
+  // Saves that ship with the site: 01 = the earlier look, 02 = the code defaults
   const BUILTIN = [
-    { name: "Speicherung 01", ms: { ...DEFAULTS.ms }, grid: { ...DEFAULTS.grid } },
     {
-      name: "Speicherung 02",
+      name: "Speicherung 01",
       ms: {
         weight: 600,
         color: "#000000",
-        merge: 0.08,
-        thicken: 1.05,
-        mass: 0.39,
-        drops: 0.15,
-        satellites: 0.04,
-        pull: 0.45,
+        merge: 0.085,
+        thicken: 0.8,
+        mass: 0.4,
+        drops: 0.07,
+        satellites: 0.045,
+        pull: 1,
         spread: 0.04,
         reach: 1,
-        hole: 0.085,
-        lean: 0.2,
-        stretch: 0.2,
+        hole: 0.06,
+        lean: 0.07,
+        stretch: 0.05,
       },
       grid: {
-        spacing: 0.16,
-        restSize: 1,
-        maxSize: 0.8,
-        catchR: 2,
-        leash: 2.5,
-        pullNear: 1,
-        pullFar: 1,
-        follow: 0.3,
-        spring: 0.01,
-        wobble: 0.74,
+        spacing: 0.2,
+        restSize: 2,
+        maxSize: 0.75,
+        catchR: 1.1,
+        leash: 4.4,
+        pullNear: 0.25,
+        pullFar: 0.5,
+        follow: 0.2,
+        spring: 0.025,
+        wobble: 0.5,
         roundness: 12,
         restColor: "#ffffff",
         peakColor: "#ffffff",
@@ -53,12 +52,13 @@
         peakAt: 0.05,
         goo: 1,
         outline: true,
-        outlineColor: "#595959",
+        outlineColor: "#2b2b2b",
         outlineWidth: 0.3,
         outlineFrom: 0,
-        textFollow: 0.1,
+        textFollow: 0.45,
       },
     },
+    { name: "Speicherung 02", ms: { ...DEFAULTS.ms }, grid: { ...DEFAULTS.grid } },
   ];
 
   // [key, label, min, max, step] — or [key, label, "color"] / [key, label, "toggle"]
@@ -120,7 +120,7 @@
     } catch (e) {
       /* ignore */
     }
-    return { saves: BUILTIN.map((p) => JSON.parse(JSON.stringify(p))), def: "Speicherung 01", next: 3 };
+    return { saves: BUILTIN.map((p) => JSON.parse(JSON.stringify(p))), def: "Speicherung 02", next: 3 };
   }
   function writeState() {
     try {
@@ -288,7 +288,7 @@
   const reset = document.createElement("button");
   reset.type = "button";
   reset.textContent = "Zurücksetzen";
-  reset.addEventListener("click", () => apply(BUILTIN[0]));
+  reset.addEventListener("click", () => apply(BUILTIN[1]));
   const copy = document.createElement("button");
   copy.type = "button";
   copy.textContent = "Werte kopieren";
