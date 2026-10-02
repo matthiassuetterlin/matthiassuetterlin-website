@@ -12,7 +12,8 @@
    * its corners round into a squircle (superellipse |x|^n + |y|^n = 1,
    * n from ~30 down to 4). Its grey follows an arc over its size: light
    * grey at rest, darkest at mid size (swinging out, melting), fading to
-   * white at full size — so right at the pointer it disappears. Moving dots sit under a goo filter
+   * white at full size — while a hairline outline along the (melted)
+   * contour grows in, so at the pointer only the outline remains. Moving dots sit under a goo filter
    * like the MS, so when they come close they melt into each other.
    * Settling, they shrink and sharpen back into tiny grey squares.
    *
@@ -42,6 +43,7 @@
   let crisp = null;
   let gooG = null;
   let gooBlur = null;
+  let gooFilter = null;
   let vLines = [];
   let letters = [];
   let W = 0;
@@ -259,17 +261,47 @@
     const defs = document.createElementNS(NS, "defs");
     const f = document.createElementNS(NS, "filter");
     f.id = "dot-goo";
-    for (const [k, v] of [["x", "-50%"], ["y", "-50%"], ["width", "200%"], ["height", "200%"]]) f.setAttribute(k, v);
+    // Region is set per frame to the moving dots' bounds (see moveDots)
+    f.setAttribute("filterUnits", "userSpaceOnUse");
+    gooFilter = f;
     f.setAttribute("color-interpolation-filters", "sRGB");
     gooBlur = document.createElementNS(NS, "feGaussianBlur");
     gooBlur.setAttribute("in", "SourceGraphic");
+    gooBlur.setAttribute("result", "blur");
     gooBlur.setAttribute("stdDeviation", (dotMax * 0.45).toFixed(2));
     const cm = document.createElementNS(NS, "feColorMatrix");
     cm.setAttribute("type", "matrix");
     // Keep each dot's own grey (it fades to white as it grows); only the
     // alpha is thresholded
     cm.setAttribute("values", "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -9");
-    f.append(gooBlur, cm);
+    cm.setAttribute("result", "goo");
+    // Hairline outline along the melted contour: the band between the goo
+    // edge and a slightly higher threshold of the same blur (cheap — no
+    // morphology). Its strength follows how light the fill is, so it
+    // appears as a dot grows and whitens; at the pointer only it remains.
+    const prim = (tag, attrs) => {
+      const el = document.createElementNS(NS, tag);
+      for (const k in attrs) el.setAttribute(k, attrs[k]);
+      return el;
+    };
+    const inner = prim("feColorMatrix", {
+      in: "blur",
+      type: "matrix",
+      values: "0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 40 -16.4",
+      result: "inner",
+    });
+    // Light fill → opaque outline (alpha from the red channel, from ~60 % up)
+    const tint = prim("feColorMatrix", {
+      in: "goo",
+      type: "matrix",
+      values: `0 0 0 0 ${OUTLINE}  0 0 0 0 ${OUTLINE}  0 0 0 0 ${OUTLINE}  2.6 0 0 0 -1.55`,
+      result: "tint",
+    });
+    // Light parts of the shape, minus its inside → only the edge band stays
+    const line = prim("feComposite", { in: "tint", in2: "inner", operator: "out", result: "line" });
+    const merge = prim("feMerge", {});
+    merge.append(prim("feMergeNode", { in: "goo" }), prim("feMergeNode", { in: "line" }));
+    f.append(gooBlur, cm, inner, tint, line, merge);
     defs.appendChild(f);
     crisp = document.createElementNS(NS, "g");
     crisp.setAttribute("class", "dots");
@@ -309,6 +341,7 @@
   const REST_GREY = 150; // ≈ 40 % black on white
   const PEAK_GREY = 115; // ≈ 55 % — most visible while swinging out
   const PEAK_AT = 0.35; // share of the full size where it is darkest
+  const OUTLINE = 0.45; // outline grey (0 black … 1 white) of grown dots
   const COS = [];
   const SIN = [];
   for (let k = 0; k < SEG; k++) {
@@ -364,6 +397,10 @@
   function moveDots() {
     let settling = false;
     const full = spacing * 0.2;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
     for (const d of dots) {
       const dx = offsetAt(d.v, d.h.pos);
       const dy = offsetAt(d.h, d.v.pos);
@@ -373,6 +410,20 @@
       if (d.round < 0.01) d.round = 0;
       else settling = true;
       drawDot(d, d.v.pos + dx, d.h.pos + dy, d.round);
+      if (d.inGoo) {
+        if (d.x < x0) x0 = d.x;
+        if (d.x > x1) x1 = d.x;
+        if (d.y < y0) y0 = d.y;
+        if (d.y > y1) y1 = d.y;
+      }
+    }
+    // Filter only where moving dots are (+ room for size and blur)
+    if (x1 >= x0 && gooFilter) {
+      const m = dotMax * 3;
+      gooFilter.setAttribute("x", (x0 - m).toFixed(0));
+      gooFilter.setAttribute("y", (y0 - m).toFixed(0));
+      gooFilter.setAttribute("width", (x1 - x0 + 2 * m).toFixed(0));
+      gooFilter.setAttribute("height", (y1 - y0 + 2 * m).toFixed(0));
     }
     return settling;
   }
