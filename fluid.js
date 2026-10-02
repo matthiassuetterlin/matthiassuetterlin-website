@@ -25,23 +25,23 @@
 
   const T = (window.fluidTune = Object.assign(
     {
-      size: 0.25, // drop radius, × MS font size
+      size: 0.12, // drop radius, × MS font size
       rest: 0.4, // size while the pointer rests, share of the full size
-      count: 8, // drops in the chain
-      taper: 0.6, // how much smaller the last drop is than the first
-      follow: 0.25, // spring stiffness of the chain
-      wobble: 0.64, // damping (higher = more overshoot)
-      merge: 1, // smooth-minimum radius, × drop radius
-      decay: 0.96, // how slowly the drop shrinks back after a move
-      lens: 0.25, // magnification inside the drop
-      rim: 0.12, // extra refraction towards the rim
-      fringe: 0.3, // colour fringe of the refraction
-      gloss: 0.6, // highlight and rim shade
-      fillColor: "#ffffff",
+      count: 6, // drops in the chain
+      taper: 0.7, // how much smaller the last drop is than the first
+      follow: 0.29, // spring stiffness of the chain
+      wobble: 0.4, // damping (higher = more overshoot)
+      merge: 3, // smooth-minimum radius, × drop radius
+      decay: 0.995, // how slowly the drop shrinks back after a move
+      lens: 0, // magnification inside the drop
+      rim: 0, // extra refraction towards the rim
+      fringe: 0, // colour fringe of the refraction
+      gloss: 0, // highlight and rim shade
+      fillColor: "#000000",
       fill: 0, // tint of the drop with the fill colour
       outline: true,
-      outlineColor: "#595959",
-      outlineWidth: 0.8, // px
+      outlineColor: "#000000",
+      outlineWidth: 1, // px
     },
     window.fluidTune || {}
   ));
