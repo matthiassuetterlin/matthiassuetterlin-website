@@ -1,464 +1,448 @@
 (() => {
   /**
-   * Dual magnetic fluids: whole-body attraction, continuous melt bridge.
-   * Cleaner field (fewer soft masses, more blur) — less pixel noise.
+   * Elastic M/S: each letter is its own deformable body.
+   *
+   * Every glyph is turned into a signed distance field of its real Playfair
+   * contour. Per frame the page pixels are pulled back through an elastic
+   * displacement field and both fields are combined with a small smooth-min,
+   * so the letters themselves stretch, lean and bulge — and only fuse where
+   * their contours actually come close. No overlay, no blur layer.
+   *
+   * Interaction: entering the middle between M and S grabs the pair. Moving
+   * left drags M along and S follows behind (and vice versa); the facing
+   * sides reach for each other under tension. Leaving the zone lets go.
    */
-  const stage = document.getElementById("ms-stage");
   const canvas = document.getElementById("ms-canvas");
   const letterM = document.getElementById("letter-m");
   const letterS = document.getElementById("letter-s");
   const home = document.getElementById("view-home");
-  if (!stage || !canvas || !letterM || !letterS || !home) return;
+  if (!canvas || !letterM || !letterS || !home) return;
 
-  const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
-  const field = document.createElement("canvas");
-  const fctx = field.getContext("2d", { willReadFrequently: true });
+  const ctx = canvas.getContext("2d");
+  const off = document.createElement("canvas");
+  const octx = off.getContext("2d");
 
-  let mouse = { x: 0, y: 0, active: false };
-  let smooth = { x: 0, y: 0 };
-  let posM = { x: 0, y: 0, vx: 0, vy: 0 };
-  let posS = { x: 0, y: 0, vx: 0, vy: 0 };
-  let mergeAmp = 0.55;
-  let mergeVel = 0;
-  let deformM = { sx: 1, sy: 1, skew: 0, pullX: 0, pullY: 0 };
-  let deformS = { sx: 1, sy: 1, skew: 0, pullX: 0, pullY: 0 };
+  const FONT_FAMILY = '"Playfair Display", "Times New Roman", Times, Georgia, serif';
+  const PAD = 48; // CSS px of field around each glyph
+  const TILE = 8; // device px per tile for empty/solid skipping
+  const MAX_PIXELS = 3200000;
+  const INF = 1e20;
+
+  let geo = null;
+  let dirty = true;
   let cssW = 0;
   let cssH = 0;
-  let iw = 0;
-  let ih = 0;
-  let scale = 1;
   let dpr = 1;
-  let t0 = performance.now();
-  let lastBox = null;
-  let boxAge = 0;
+  // Distance-field samples per CSS px — follows the display density
+  let SDF_RES = 2;
+  let lastRegion = null;
+  let checkAge = 0;
+  const t0 = performance.now();
 
-  // Cap internal sim resolution — biggest FPS win vs full-viewport × SS
-  const MAX_EDGE = 1280;
+  const mouse = { x: 0, y: 0, active: false };
+  let latched = false;
+  const eng = { x: 0.2, v: 0 };
+  const uLead = { x: 0, v: 0 };
+  const uTrail = { x: 0, v: 0 };
+  const vLead = { x: 0, v: 0 };
+  const vTrail = { x: 0, v: 0 };
+  const grabY = { x: 0, v: 0 };
 
-  const FONT =
-    '700 1px "Playfair Display", "Times New Roman", Times, Georgia, serif';
-
+  function clamp(v, a, b) {
+    return v < a ? a : v > b ? b : v;
+  }
   function lerp(a, b, t) {
     return a + (b - a) * t;
   }
-  function clamp(v, a, b) {
-    return Math.max(a, Math.min(b, v));
+  function smoothstep(a, b, x) {
+    const t = clamp((x - a) / (b - a), 0, 1);
+    return t * t * (3 - 2 * t);
+  }
+  function spring(s, target, k, damp) {
+    s.v = (s.v + (target - s.x) * k) * damp;
+    s.x += s.v;
   }
 
-  if (document.fonts && document.fonts.load) {
-    document.fonts.load('700 220px "Playfair Display"').catch(() => {});
-  }
+  // --- Signed distance field (Felzenszwalb & Huttenlocher EDT) ----------
 
-  function layout() {
-    dpr = Math.min(window.devicePixelRatio || 1, 1.75);
-    const nw = Math.max(2, window.innerWidth | 0);
-    const nh = Math.max(2, window.innerHeight | 0);
-    if (nw === cssW && nh === cssH) {
-      return;
+  function edt1d(f, n, d, v, z) {
+    let k = 0;
+    v[0] = 0;
+    z[0] = -INF;
+    z[1] = INF;
+    for (let q = 1; q < n; q++) {
+      let s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+      while (s <= z[k]) {
+        k--;
+        s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+      }
+      k++;
+      v[k] = q;
+      z[k] = s;
+      z[k + 1] = INF;
     }
-    cssW = nw;
-    cssH = nh;
-    scale = Math.min(1, MAX_EDGE / Math.max(nw, nh));
-    iw = Math.max(2, Math.round(nw * scale));
-    ih = Math.max(2, Math.round(nh * scale));
+    k = 0;
+    for (let q = 0; q < n; q++) {
+      while (z[k + 1] < q) k++;
+      const dq = q - v[k];
+      d[q] = dq * dq + f[v[k]];
+    }
+  }
 
+  function edt2d(grid, w, h) {
+    const n = Math.max(w, h);
+    const f = new Float64Array(n);
+    const d = new Float64Array(n);
+    const v = new Int32Array(n);
+    const z = new Float64Array(n + 1);
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) f[y] = grid[y * w + x];
+      edt1d(f, h, d, v, z);
+      for (let y = 0; y < h; y++) grid[y * w + x] = d[y];
+    }
+    for (let y = 0; y < h; y++) {
+      const o = y * w;
+      for (let x = 0; x < w; x++) f[x] = grid[o + x];
+      edt1d(f, w, d, v, z);
+      for (let x = 0; x < w; x++) grid[o + x] = d[x];
+    }
+  }
+
+  function buildGlyph(ch, rect, fontPx) {
+    const font = `700 ${fontPx}px ${FONT_FAMILY}`;
+    octx.font = font;
+    octx.textAlign = "center";
+    octx.textBaseline = "middle";
+    const cx = rect.left + rect.width * 0.5;
+    const cy = rect.top + rect.height * 0.5 + fontPx * 0.03;
+    const m = octx.measureText(ch);
+    const box = {
+      l: cx - m.actualBoundingBoxLeft,
+      r: cx + m.actualBoundingBoxRight,
+      t: cy - m.actualBoundingBoxAscent,
+      b: cy + m.actualBoundingBoxDescent,
+    };
+    const x0 = box.l - PAD;
+    const y0 = box.t - PAD;
+    const w = Math.ceil((box.r - box.l + PAD * 2) * SDF_RES);
+    const h = Math.ceil((box.b - box.t + PAD * 2) * SDF_RES);
+
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.setTransform(SDF_RES, 0, 0, SDF_RES, -x0 * SDF_RES, -y0 * SDF_RES);
+    g.font = font;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillStyle = "#000";
+    g.fillText(ch, cx, cy);
+    const px = g.getImageData(0, 0, w, h).data;
+
+    const toIn = new Float64Array(w * h);
+    const toOut = new Float64Array(w * h);
+    for (let i = 0, j = 3; i < w * h; i++, j += 4) {
+      const inside = px[j] >= 128;
+      toIn[i] = inside ? 0 : INF;
+      toOut[i] = inside ? INF : 0;
+    }
+    edt2d(toIn, w, h);
+    edt2d(toOut, w, h);
+
+    const data = new Float32Array(w * h);
+    const inv = 1 / SDF_RES;
+    for (let i = 0; i < w * h; i++) {
+      data[i] =
+        toIn[i] > 0
+          ? (Math.sqrt(toIn[i]) - 0.5) * inv
+          : -(Math.sqrt(toOut[i]) - 0.5) * inv;
+    }
+    return { x0, y0, w, h, data, box };
+  }
+
+  function sample(G, x, y) {
+    let fx = (x - G.x0) * SDF_RES - 0.5;
+    let fy = (y - G.y0) * SDF_RES - 0.5;
+    let ox = 0;
+    let oy = 0;
+    const mx = G.w - 1;
+    const my = G.h - 1;
+    if (fx < 0) {
+      ox = -fx;
+      fx = 0;
+    } else if (fx > mx) {
+      ox = fx - mx;
+      fx = mx;
+    }
+    if (fy < 0) {
+      oy = -fy;
+      fy = 0;
+    } else if (fy > my) {
+      oy = fy - my;
+      fy = my;
+    }
+    const ix = fx | 0;
+    const iy = fy | 0;
+    const tx = fx - ix;
+    const ty = fy - iy;
+    const ix1 = ix < mx ? ix + 1 : ix;
+    const iy1 = iy < my ? iy + 1 : iy;
+    const D = G.data;
+    const r0 = iy * G.w;
+    const r1 = iy1 * G.w;
+    const a = D[r0 + ix] + (D[r0 + ix1] - D[r0 + ix]) * tx;
+    const b = D[r1 + ix] + (D[r1 + ix1] - D[r1 + ix]) * tx;
+    let v = a + (b - a) * ty;
+    if (ox || oy) v += Math.sqrt(ox * ox + oy * oy) / SDF_RES;
+    return v;
+  }
+
+  // --- Layout -------------------------------------------------------------
+
+  function readRects() {
+    letterM.style.transform = "";
+    letterS.style.transform = "";
+    return [letterM.getBoundingClientRect(), letterS.getBoundingClientRect()];
+  }
+
+  function rebuild() {
+    dpr = window.devicePixelRatio || 1;
+    cssW = Math.max(2, window.innerWidth | 0);
+    cssH = Math.max(2, window.innerHeight | 0);
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     canvas.style.width = cssW + "px";
     canvas.style.height = cssH + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    lastRegion = null;
+    SDF_RES = Math.min(3, Math.max(2, dpr));
 
-    field.width = iw;
-    field.height = ih;
-  }
+    const [rm, rs] = readRects();
+    if (rm.width < 2 || rs.width < 2) {
+      geo = null;
+      return;
+    }
+    const fontPx = parseFloat(getComputedStyle(letterM).fontSize) || rm.height;
+    const M = buildGlyph("M", rm, fontPx);
+    const S = buildGlyph("S", rs, fontPx);
 
-  function readBoxes() {
-    // Cache letter metrics most frames — layout rarely changes mid-hover
-    boxAge++;
-    if (lastBox && boxAge < 8) return lastBox;
+    const H = Math.max(M.box.b - M.box.t, S.box.b - S.box.t);
+    const W = (M.box.r - M.box.l + S.box.r - S.box.l) * 0.5;
+    const mL = M.box.l;
+    const mR = M.box.r;
+    const sL = S.box.l;
+    const sR = S.box.r;
+    const midX = (mR + sL) * 0.5;
+    const midY = (Math.min(M.box.t, S.box.t) + Math.max(M.box.b, S.box.b)) * 0.5;
+    const Umax = W * 0.5;
+    const Vmax = H * 0.3;
 
-    const tm = letterM.style.transform;
-    const ts = letterS.style.transform;
-    letterM.style.transform = "none";
-    letterS.style.transform = "none";
-    const m = letterM.getBoundingClientRect();
-    const s = letterS.getBoundingClientRect();
-    letterM.style.transform = tm;
-    letterS.style.transform = ts;
+    // Render region: both glyph fields plus the furthest drag
+    const rx0 = Math.max(0, Math.floor(Math.min(M.x0, S.x0) - Umax - 12));
+    const rx1 = Math.min(cssW, Math.ceil(Math.max(M.x0 + M.w / SDF_RES, S.x0 + S.w / SDF_RES) + Umax + 12));
+    const ry0 = Math.max(0, Math.floor(Math.min(M.y0, S.y0) - Vmax * 0.5 - 8));
+    const ry1 = Math.min(cssH, Math.ceil(Math.max(M.y0 + M.h / SDF_RES, S.y0 + S.h / SDF_RES) + Vmax * 0.5 + 8));
+    const rw = Math.max(1, rx1 - rx0);
+    const rh = Math.max(1, ry1 - ry0);
+    let q = Math.min(dpr, 2);
+    if (rw * rh * q * q > MAX_PIXELS) q = Math.sqrt(MAX_PIXELS / (rw * rh));
+    const bw = Math.max(1, Math.round(rw * q));
+    const bh = Math.max(1, Math.round(rh * q));
+    off.width = bw;
+    off.height = bh;
+    const img = octx.createImageData(bw, bh);
 
-    lastBox = {
-      m: {
-        w: m.width * scale,
-        h: m.height * scale,
-        cx: (m.left + m.width * 0.5) * scale,
-        cy: (m.top + m.height * 0.5) * scale,
-      },
-      s: {
-        w: s.width * scale,
-        h: s.height * scale,
-        cx: (s.left + s.width * 0.5) * scale,
-        cy: (s.top + s.height * 0.5) * scale,
-      },
+    geo = {
+      M,
+      S,
+      H,
+      W,
+      mL,
+      mR,
+      sL,
+      sR,
+      midX,
+      midY,
+      Umax,
+      Vmax,
+      rects: [rm, rs],
+      region: { x: rx0, y: ry0, w: rw, h: rh, q, bw, bh },
+      img,
+      buf: new Uint32Array(img.data.buffer),
     };
-    boxAge = 0;
-    return lastBox;
   }
 
-  function springToward(state, tx, ty, k, damp) {
-    state.vx = (state.vx + (tx - state.x) * k) * damp;
-    state.vy = (state.vy + (ty - state.y) * k) * damp;
-    state.x += state.vx;
-    state.y += state.vy;
+  function rectsMoved() {
+    const [rm, rs] = readRects();
+    const [om, os] = geo.rects;
+    return (
+      Math.abs(rm.left - om.left) > 0.5 ||
+      Math.abs(rm.top - om.top) > 0.5 ||
+      Math.abs(rs.left - os.left) > 0.5 ||
+      Math.abs(rm.height - om.height) > 0.5
+    );
   }
 
-  function drawGlyph(ch, cx, cy, boxH) {
-    const fs = Math.max(12, boxH * 1.02);
-    fctx.fillStyle = "#fff";
-    fctx.textAlign = "center";
-    fctx.textBaseline = "middle";
-    fctx.font = FONT.replace("1px", fs + "px");
-    fctx.fillText(ch, cx, cy + fs * 0.03);
-  }
-
-  // Full-resolution black glyphs — crisp contour on top of soft fluid
-  function drawSharpGlyph(ch, cx, cy, boxH) {
-    const fs = Math.max(12, boxH * 1.02);
-    ctx.fillStyle = "#000";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = FONT.replace("1px", fs + "px");
-    ctx.fillText(ch, cx, cy + fs * 0.03);
-  }
-
-  function drawGlyphWarped(ch, cx, cy, boxH, def) {
-    const fs = Math.max(12, boxH * 1.02);
-    fctx.save();
-    fctx.translate(cx, cy);
-    fctx.transform(def.sx, 0, Math.tan(def.skew * 0.55), def.sy, 0, 0);
-    fctx.fillStyle = "#fff";
-    fctx.textAlign = "center";
-    fctx.textBaseline = "middle";
-    fctx.font = FONT.replace("1px", fs + "px");
-    fctx.fillText(ch, 0, fs * 0.03);
-    fctx.restore();
-  }
-
-  function drawSharpGlyphWarped(ch, cx, cy, boxH, def) {
-    const fs = Math.max(12, boxH * 1.02);
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.transform(def.sx, 0, Math.tan(def.skew * 0.55), def.sy, 0, 0);
-    ctx.fillStyle = "#000";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = FONT.replace("1px", fs + "px");
-    ctx.fillText(ch, 0, fs * 0.03);
-    ctx.restore();
-  }
-
-  function blob(x, y, r, a) {
-    if (r < 0.5) return;
-    const g = fctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `rgba(255,255,255,${a})`);
-    g.addColorStop(0.45, `rgba(255,255,255,${a * 0.55})`);
-    g.addColorStop(1, "rgba(255,255,255,0)");
-    fctx.fillStyle = g;
-    fctx.beginPath();
-    fctx.arc(x, y, r, 0, Math.PI * 2);
-    fctx.fill();
-  }
-
-  // Soft ellipse mass — covers a letter body or a continuous bridge lobe
-  function softEllipse(x, y, rx, ry, a) {
-    if (rx < 0.5 || ry < 0.5) return;
-    fctx.save();
-    fctx.translate(x, y);
-    fctx.scale(rx, ry);
-    const g = fctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-    g.addColorStop(0, `rgba(255,255,255,${a})`);
-    g.addColorStop(0.5, `rgba(255,255,255,${a * 0.45})`);
-    g.addColorStop(1, "rgba(255,255,255,0)");
-    fctx.fillStyle = g;
-    fctx.beginPath();
-    fctx.arc(0, 0, 1, 0, Math.PI * 2);
-    fctx.fill();
-    fctx.restore();
-  }
-
-  // Continuous magnetic filament between two points (whole-body link, not dotted)
-  function softCapsule(x0, y0, x1, y1, radius, a) {
-    if (radius < 0.5) return;
-    fctx.save();
-    fctx.strokeStyle = `rgba(255,255,255,${a})`;
-    fctx.lineWidth = radius * 2;
-    fctx.lineCap = "round";
-    fctx.lineJoin = "round";
-    fctx.shadowColor = `rgba(255,255,255,${a * 0.85})`;
-    fctx.shadowBlur = radius * 1.1;
-    fctx.beginPath();
-    fctx.moveTo(x0, y0);
-    fctx.lineTo(x1, y1);
-    fctx.stroke();
-    fctx.restore();
-  }
-
-  let edgeOut = null;
-
-  // Crisp iso-contour: anti-alias over ~1px using the local field gradient,
-  // so shallow melt regions get the same sharp outline as the letters.
-  function crispThreshold() {
-    const img = fctx.getImageData(0, 0, iw, ih);
-    const src = img.data;
-    if (!edgeOut || edgeOut.width !== iw || edgeOut.height !== ih) {
-      edgeOut = fctx.createImageData(iw, ih);
-    }
-    const out = edgeOut.data;
-    const T = 150;
-    // Beyond this distance from T the pixel is >1px from the edge for any
-    // gradient the blurred field can have — skip the gradient math there.
-    const BAND = 48;
-    const row = iw * 4;
-    for (let y = 0; y < ih; y++) {
-      const y0 = y > 0 ? -row : 0;
-      const y1 = y < ih - 1 ? row : 0;
-      let i = y * row;
-      for (let x = 0; x < iw; x++, i += 4) {
-        const dv = src[i] - T;
-        let a;
-        if (dv <= -BAND) {
-          a = 0;
-        } else if (dv >= BAND) {
-          a = 255;
-        } else {
-          const gx = (src[x < iw - 1 ? i + 4 : i] - src[x > 0 ? i - 4 : i]) * 0.5;
-          const gy = (src[i + y1] - src[i + y0]) * 0.5;
-          const g = Math.sqrt(gx * gx + gy * gy);
-          const t = g > 0.001 ? dv / g + 0.5 : dv > 0 ? 1 : 0;
-          a = t <= 0 ? 0 : t >= 1 ? 255 : (t * 255) | 0;
-        }
-        out[i + 3] = a;
-      }
-    }
-    fctx.putImageData(edgeOut, 0, 0);
-  }
+  // --- Frame --------------------------------------------------------------
 
   function frame(now) {
     requestAnimationFrame(frame);
-    if (!home.classList.contains("is-active") || home.hidden) return;
+    if (!home.classList.contains("is-active") || home.hidden) {
+      if (lastRegion) {
+        ctx.clearRect(lastRegion.x, lastRegion.y, lastRegion.w, lastRegion.h);
+        lastRegion = null;
+      }
+      return;
+    }
+    if (++checkAge > 30) {
+      checkAge = 0;
+      if (geo && rectsMoved()) dirty = true;
+    }
+    if (dirty || window.innerWidth !== cssW || window.innerHeight !== cssH) {
+      dirty = false;
+      rebuild();
+    }
+    if (!geo) return;
 
-    layout();
-    if (iw < 8) return;
-
+    const G = geo;
     const time = (now - t0) / 1000;
-    const b = readBoxes();
-    const midX = (b.m.cx + b.s.cx) * 0.5;
-    const midY = (b.m.cy + b.s.cy) * 0.5;
+    const H = G.H;
+    const W = G.W;
 
-    const tx = mouse.active ? mouse.x * scale : midX + Math.sin(time * 0.5) * 18 * scale;
-    const ty = mouse.active ? mouse.y * scale : midY + Math.cos(time * 0.4) * 10 * scale;
-    smooth.x = lerp(smooth.x || tx, tx, 0.14);
-    smooth.y = lerp(smooth.y || ty, ty, 0.14);
-
-    const dist = Math.hypot(smooth.x - midX, smooth.y - midY);
-    const reach = Math.min(iw, ih) * 0.62;
-    const outward = mouse.active ? clamp(dist / reach, 0, 1.45) : 0.12;
-    const inward = mouse.active ? clamp(1 - dist / (reach * 0.72), 0, 1) : 0.5;
-    // Proximity to either letter (field space) — drives form warp
-    const dM = Math.hypot(smooth.x - b.m.cx, smooth.y - b.m.cy);
-    const dS = Math.hypot(smooth.x - b.s.cx, smooth.y - b.s.cy);
-    const nearR = Math.min(b.m.h, b.s.h) * 1.35;
-    const proxM = mouse.active ? clamp(1 - dM / nearR, 0, 1) : 0;
-    const proxS = mouse.active ? clamp(1 - dS / nearR, 0, 1) : 0;
-    // Soft proximity — never strong enough to collapse into one cursor blob
-    const prox = Math.max(proxM, proxS, inward * 0.65) * 0.72;
-    // How hard the two fluids want to melt into each other (not toward the cursor)
-    const melt = mouse.active
-      ? clamp(inward * 0.85 + (1 - clamp(outward, 0, 1)) * 0.55 + prox * 0.25, 0, 1)
-      : 0.4 + 0.12 * Math.sin(time * 0.55);
-
-    // Pull-together capped — two bodies stay readable while magnetically linking
-    const MERGE_CAP = 1.05;
-    const together = mouse.active
-      ? lerp(38 + melt * 10, -55, clamp(outward, 0, 1))
-      : 10 + Math.sin(time * 0.7) * 4;
-    const attractMerge = mouse.active
-      ? clamp(
-          lerp(0.35 + melt * 0.85, 0.14, clamp(outward / 1.05, 0, 1)) * (0.75 + prox * 0.25),
-          0.12,
-          MERGE_CAP
-        )
-      : 0.42 + 0.14 * Math.sin(time * 0.65);
-
-    const leanAmt = 0.12 + prox * 0.18;
-    const leanM = mouse.active ? ((smooth.x - b.m.cx) / scale) * leanAmt * (0.55 + outward * 0.5 + proxM) : 0;
-    const leanS = mouse.active ? ((smooth.x - b.s.cx) / scale) * leanAmt * (0.55 + outward * 0.5 + proxS) : 0;
-    const leanMY = mouse.active ? ((smooth.y - b.m.cy) / scale) * (0.14 + proxM * 0.12) : 0;
-    const leanSY = mouse.active ? ((smooth.y - b.s.cy) / scale) * (0.14 + proxS * 0.12) : 0;
-
-    // Snappier springs
-    springToward(
-      posM,
-      together + leanM + Math.sin(time * 1.1) * 2.5,
-      leanMY + Math.cos(time * 0.9) * 2.2,
-      0.11,
-      0.82
-    );
-    springToward(
-      posS,
-      -together + leanS + Math.sin(time * 1.1 + 1.2) * 2.5,
-      leanSY + Math.cos(time * 0.9 + 0.8) * 2.2,
-      0.11,
-      0.82
-    );
-
-    const mergeTarget = attractMerge;
-    mergeVel = (mergeVel + (mergeTarget - mergeAmp) * 0.14) * 0.88;
-    mergeAmp = clamp(mergeAmp + mergeVel, 0.12, MERGE_CAP);
-
-    // Letter-form distortion toward the cursor (skew / stretch / squash)
-    function aimDeform(def, cx, cy, proxLetter, towardSiblingX) {
-      const dx = mouse.active ? (smooth.x - cx) / scale : 0;
-      const dy = mouse.active ? (smooth.y - cy) / scale : 0;
-      const pull = proxLetter * proxLetter * 0.75;
-      const magnetic = melt * melt;
-      const tSx =
-        1 +
-        pull * clamp(dx / 180, -0.28, 0.28) +
-        magnetic * 0.1 +
-        towardSiblingX * magnetic * 0.06;
-      const tSy = 1 + pull * clamp(dy / 200, -0.24, 0.24) - prox * 0.05 * pull - magnetic * 0.04;
-      const tSkew = pull * clamp(dx / 120, -0.32, 0.32) + towardSiblingX * magnetic * 0.12;
-      const tPullX = pull * clamp(dx * 0.12, -18, 18) + towardSiblingX * magnetic * 10;
-      const tPullY = pull * clamp(dy * 0.1, -14, 14);
-      def.sx = lerp(def.sx, tSx, 0.16);
-      def.sy = lerp(def.sy, clamp(tSy, 0.82, 1.22), 0.16);
-      def.skew = lerp(def.skew, tSkew, 0.16);
-      def.pullX = lerp(def.pullX, tPullX, 0.16);
-      def.pullY = lerp(def.pullY, tPullY, 0.16);
-    }
-    // +1 = stretch toward S (right), -1 = stretch toward M (left)
-    aimDeform(deformM, b.m.cx, b.m.cy, Math.max(proxM, inward * 0.55), 1);
-    aimDeform(deformS, b.s.cx, b.s.cy, Math.max(proxS, inward * 0.55), -1);
-
-    // Keep a readable gap between glyph centers (never fully fused)
-    const minSep = Math.max(b.m.w, b.s.w) / scale * 0.42;
-    const gapX = (b.s.cx - b.m.cx) / scale + (posS.x + deformS.pullX) - (posM.x + deformM.pullX);
-    if (gapX < minSep) {
-      const fix = (minSep - gapX) * 0.5;
-      posM.x -= fix;
-      posS.x += fix;
+    // Interaction targets
+    let eT;
+    let uT;
+    let vT;
+    let gyT = G.midY;
+    if (mouse.active) {
+      const dx = mouse.x - G.midX;
+      const dy = mouse.y - G.midY;
+      const hx = (G.sR - G.mL) * 0.5 + W * 0.3;
+      const hy = H * 0.85;
+      const ex = 1 - smoothstep(hx, hx + W * 0.6, Math.abs(dx));
+      const ey = 1 - smoothstep(hy, hy + H * 0.5, Math.abs(dy));
+      const inMiddle = Math.abs(dx) < (G.sL - G.mR) * 0.5 + W * 0.22 && Math.abs(dy) < H * 0.6;
+      if (inMiddle) latched = true;
+      if (ex * ey < 0.02) latched = false;
+      if (latched) {
+        eT = ex * ey;
+        gyT = clamp(mouse.y, G.midY - H * 0.5, G.midY + H * 0.5);
+        uT = G.Umax * Math.tanh(dx / G.Umax) * eT;
+        vT = G.Vmax * 0.45 * Math.tanh(dy / G.Vmax) * eT;
+      } else {
+        // Approaching the pair: faint pre-attraction, no drag yet
+        eT = 0.35 * ey * (1 - smoothstep(0, hx, Math.abs(dx)));
+        uT = 0;
+        vT = 0;
+      }
+    } else {
+      latched = false;
+      eT = 0.18 + 0.07 * Math.sin(time * 0.6);
+      uT = Math.sin(time * 0.4) * W * 0.02;
+      vT = 0;
     }
 
-    letterM.style.transform =
-      `translate(${(posM.x + deformM.pullX).toFixed(2)}px, ${(posM.y + deformM.pullY).toFixed(2)}px) ` +
-      `skewX(${(deformM.skew * 18).toFixed(2)}deg) scale(${deformM.sx.toFixed(3)}, ${deformM.sy.toFixed(3)})`;
-    letterS.style.transform =
-      `translate(${(posS.x + deformS.pullX).toFixed(2)}px, ${(posS.y + deformS.pullY).toFixed(2)}px) ` +
-      `skewX(${(deformS.skew * 18).toFixed(2)}deg) scale(${deformS.sx.toFixed(3)}, ${deformS.sy.toFixed(3)})`;
+    // Leading side follows fast, trailing side lags — elastic stretch
+    spring(eng, eT, 0.08, 0.82);
+    spring(uLead, uT, 0.14, 0.8);
+    spring(uTrail, uT, 0.055, 0.86);
+    spring(vLead, vT, 0.14, 0.8);
+    spring(vTrail, vT, 0.055, 0.86);
+    spring(grabY, gyT, 0.1, 0.8);
 
-    // Invalidate box cache when letters move a lot
-    if (Math.abs(posM.vx) + Math.abs(posS.vx) > 0.4) boxAge = 99;
+    const e = clamp(eng.x, 0, 1);
+    const pull = Math.abs(uLead.x);
+    // Neck: a narrow, horizontally reaching lobe at mid-height on each facing side
+    const sigX = H * 0.3;
+    const sigY = H * 0.2;
+    const invX = 1 / (2 * sigX * sigX);
+    const invY = 1 / (2 * sigY * sigY);
+    const bulge = Math.min(sigX * 0.5, e * H * 0.08 + pull * 0.15 * e);
+    // Fuse only where the reaching contours actually meet — kept small
+    const kMerge = Math.max(0.001, Math.min(H * 0.07, e * H * 0.03 + pull * 0.05 * e));
+    const lean = e * H * 0.025;
+    const lam = 0.5 + 0.5 * Math.tanh(uLead.x / 15);
+    const span = Math.max(1, G.sR - G.mL);
+    const gapC = G.midX;
+    const sigW = H * 0.16;
+    const cMx = G.mR - W * 0.12;
+    const cSx = G.sL + W * 0.12;
+    const cY = G.midY + H * 0.05;
+    const TRAIL = 0.15;
+    const uL = uLead.x;
+    const uTr = uTrail.x * TRAIL;
+    const vL = vLead.x;
+    const vTr = vTrail.x * TRAIL;
+    // Rows near the grab height are dragged hardest — the bodies bend
+    const gY = grabY.x;
+    const invBend = 1 / (2 * (H * 0.55) * (H * 0.55));
+    const M = G.M;
+    const S = G.S;
+    const mL = G.mL;
 
-    const mCx = b.m.cx + (posM.x + deformM.pullX) * scale;
-    const mCy = b.m.cy + (posM.y + deformM.pullY) * scale;
-    const sCx = b.s.cx + (posS.x + deformS.pullX) * scale;
-    const sCy = b.s.cy + (posS.y + deformS.pullY) * scale;
-
-    fctx.setTransform(1, 0, 0, 1, 0, 0);
-    fctx.fillStyle = "#000";
-    fctx.fillRect(0, 0, iw, ih);
-
-    drawGlyphWarped("M", mCx, mCy, b.m.h, deformM);
-    drawGlyphWarped("S", sCx, sCy, b.s.h, deformS);
-
-    const mRight = mCx + b.m.w * 0.28;
-    const sLeft = sCx - b.s.w * 0.28;
-    const letterH = Math.min(b.m.h, b.s.h);
-    const baseY = (mCy + sCy) * 0.5 + letterH * 0.12;
-    const gap = Math.max(4, sLeft - mRight);
-    const strand = clamp(gap / (90 * scale), 0, 1);
-    const meltStrength = clamp(
-      mergeAmp * (0.35 + melt * 0.75) * (1 - strand * 0.65),
-      0,
-      MERGE_CAP
-    );
-
-    // Whole-body magnetic auras — attraction from the full letter mass
-    softEllipse(mCx, mCy, b.m.w * 0.48, b.m.h * 0.52, 0.55 + meltStrength * 0.2);
-    softEllipse(sCx, sCy, b.s.w * 0.46, b.s.h * 0.52, 0.55 + meltStrength * 0.2);
-    // Facing halves stretch toward each other as continuous bodies
-    const bodyReach = gap * (0.12 + meltStrength * 0.38);
-    softEllipse(
-      mCx + b.m.w * 0.18 + bodyReach * 0.35,
-      mCy + letterH * 0.06,
-      b.m.w * (0.38 + meltStrength * 0.22) + bodyReach * 0.25,
-      b.m.h * (0.42 + meltStrength * 0.08),
-      0.75 + meltStrength * 0.2
-    );
-    softEllipse(
-      sCx - b.s.w * 0.18 - bodyReach * 0.35,
-      sCy + letterH * 0.04,
-      b.s.w * (0.36 + meltStrength * 0.22) + bodyReach * 0.25,
-      b.s.h * (0.42 + meltStrength * 0.08),
-      0.75 + meltStrength * 0.2
-    );
-
-    // Continuous melt bridges (capsules) — not dotted point chains
-    const bendY = mouse.active
-      ? (smooth.y - baseY) * 0.1 * (0.5 + meltStrength * 0.5)
-      : Math.sin(time * 1.3) * 3 * scale;
-    const bridgeW = (6 + meltStrength * 28) * scale * (1 - strand * 0.45);
-    const yBands = [
-      baseY - letterH * 0.16,
-      baseY,
-      baseY + letterH * 0.14,
-    ];
-    for (let bi = 0; bi < yBands.length; bi++) {
-      const by = yBands[bi] + bendY * (bi === 1 ? 1 : 0.45);
-      const wMul = bi === 1 ? 1 : 0.62 + meltStrength * 0.2;
-      // Skip side bands when far / low melt — keeps dual contours clear
-      if (bi !== 1 && meltStrength < 0.28 && strand > 0.55) continue;
-      softCapsule(
-        mRight - 4 * scale,
-        by + Math.sin(time * 1.7 + bi) * 2 * scale,
-        sLeft + 4 * scale,
-        by + Math.cos(time * 1.6 + bi) * 2 * scale,
-        bridgeW * wMul,
-        0.55 + meltStrength * 0.4
-      );
+    function field(x, y) {
+      // Chain displacement along the pair (0 = left end, 1 = right end)
+      const lin = clamp((x - mL) / span, 0, 1);
+      const sig = 1 / (1 + Math.exp(-(x - gapC) / sigW));
+      const h = 0.35 * lin + 0.65 * sig;
+      const g = lerp(1 - h, h, lam);
+      const by = y - gY;
+      const bend = 0.55 + 0.45 * Math.exp(-by * by * invBend);
+      const qx = x - lerp(uTr, uL, g) * bend;
+      const qy = y - lerp(vTr, vL, g);
+      // Facing-side necks, evaluated in rest coordinates
+      const dmx = qx - cMx;
+      const dmy = qy - cY;
+      const ny = Math.exp(-dmy * dmy * invY);
+      const bm = bulge * ny * Math.exp(-dmx * dmx * invX);
+      const dsx = qx - cSx;
+      const bs = bulge * ny * Math.exp(-dsx * dsx * invX);
+      const a = sample(M, qx - bm - lean, qy);
+      const b = sample(S, qx + bs + lean, qy);
+      // Polynomial smooth-min: fuse only where contours come within kMerge
+      const hh = kMerge - Math.abs(a - b);
+      if (hh <= 0) return a < b ? a : b;
+      return (a < b ? a : b) - (hh * hh) / (4 * kMerge);
     }
 
-    // Soft mid mass when strongly melting — one continuous pool, not a cursor blot
-    if (meltStrength > 0.45 && strand < 0.55) {
-      softEllipse(
-        lerp(mRight, sLeft, 0.5) + Math.sin(time * 1.5) * 3 * scale,
-        baseY + bendY * 0.5,
-        gap * (0.28 + meltStrength * 0.22) + bridgeW,
-        bridgeW * (1.1 + meltStrength * 0.5),
-        0.7 + meltStrength * 0.25
-      );
+    const R = G.region;
+    const q = R.q;
+    const buf = G.buf;
+    const bw = R.bw;
+    const bh = R.bh;
+    buf.fill(0);
+    const invQ = 1 / q;
+    const tileRad = ((TILE * 0.7072) / q) * 3 + invQ;
+    const SOLID = 0xff000000 | 0;
+
+    for (let ty = 0; ty < bh; ty += TILE) {
+      const ty1 = Math.min(bh, ty + TILE);
+      for (let tx = 0; tx < bw; tx += TILE) {
+        const tx1 = Math.min(bw, tx + TILE);
+        const dc = field(R.x + (tx + TILE * 0.5) * invQ, R.y + (ty + TILE * 0.5) * invQ);
+        if (dc > tileRad) continue;
+        if (dc < -tileRad) {
+          for (let py = ty; py < ty1; py++) buf.fill(SOLID, py * bw + tx, py * bw + tx1);
+          continue;
+        }
+        for (let py = ty; py < ty1; py++) {
+          const cy = R.y + (py + 0.5) * invQ;
+          let i = py * bw + tx;
+          for (let px = tx; px < tx1; px++, i++) {
+            const d = field(R.x + (px + 0.5) * invQ, cy);
+            const t = 0.5 - d * q;
+            if (t <= 0) continue;
+            buf[i] = t >= 1 ? SOLID : ((t * 255) | 0) << 24;
+          }
+        }
+      }
     }
 
-    // Extra blur pass — smooths capsules/ellipses, kills pixel noise
-    const blurPx = Math.max(5, 11 * scale);
-    fctx.filter = `blur(${blurPx.toFixed(2)}px)`;
-    fctx.drawImage(field, 0, 0);
-    fctx.filter = "none";
-
-    crispThreshold();
-
-    ctx.clearRect(0, 0, cssW, cssH);
+    octx.putImageData(G.img, 0, 0);
+    if (lastRegion) ctx.clearRect(lastRegion.x, lastRegion.y, lastRegion.w, lastRegion.h);
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(field, 0, 0, cssW, cssH);
-
-    // Stamp crisp Playfair on top (display resolution)
-    const mCxCss = b.m.cx / scale + posM.x;
-    const mCyCss = b.m.cy / scale + posM.y;
-    const sCxCss = b.s.cx / scale + posS.x;
-    const sCyCss = b.s.cy / scale + posS.y;
-    drawSharpGlyphWarped("M", mCxCss + deformM.pullX, mCyCss + deformM.pullY, b.m.h / scale, deformM);
-    drawSharpGlyphWarped("S", sCxCss + deformS.pullX, sCyCss + deformS.pullY, b.s.h / scale, deformS);
+    ctx.drawImage(off, R.x, R.y, R.w, R.h);
+    lastRegion = R;
   }
 
   window.addEventListener(
@@ -496,11 +480,14 @@
   window.addEventListener(
     "resize",
     () => {
-      cssW = 0; // force layout refresh
-      lastBox = null;
+      dirty = true;
     },
     { passive: true }
   );
+  if (document.fonts) {
+    document.fonts.load('700 220px "Playfair Display"').then(() => (dirty = true), () => {});
+    document.fonts.ready.then(() => (dirty = true));
+  }
 
   requestAnimationFrame(frame);
 })();
