@@ -7,6 +7,15 @@
    * content. Crossing a line grabs it; it follows the pointer until it
    * snaps free and swings out like a plucked string.
    *
+   * The lines themselves are invisible: only their crossings are drawn, as
+   * tiny squares that ride both lines. As soon as one moves it grows and
+   * its corners round into a squircle (superellipse |x|^n + |y|^n = 1,
+   * n from ~30 down to 4). Its grey follows an arc over its size: light
+   * grey at rest, darkest at mid size (swinging out, melting), fading to
+   * white at full size — so right at the pointer it disappears. Moving dots sit under a goo filter
+   * like the MS, so when they come close they melt into each other.
+   * Settling, they shrink and sharpen back into tiny grey squares.
+   *
    * Text hangs on the grid: main text (titles, project names, tagline)
    * stands above a grid line with a clear gap, its sub text hangs below the
    * same line with the same gap. Finer text uses a line height that divides
@@ -27,6 +36,12 @@
   const SPLIT = ".panel, .tagline, .home-hint";
 
   let hLines = [];
+  let dots = [];
+  let dotHalf = 1; // half size at rest
+  let dotMax = 11; // half size in full motion
+  let crisp = null;
+  let gooG = null;
+  let gooBlur = null;
   let vLines = [];
   let letters = [];
   let W = 0;
@@ -237,30 +252,129 @@
     svg.style.width = `${W}px`;
     svg.style.height = `${D}px`;
     svg.textContent = "";
+    dots = [];
+    dotHalf = Math.max(1, spacing * 0.014); // ≥ 2 px, also on phones
+    dotMax = Math.max(5, spacing * 0.16);
+    // Resting dots stay crisp; moving ones go into the goo group
+    const defs = document.createElementNS(NS, "defs");
+    const f = document.createElementNS(NS, "filter");
+    f.id = "dot-goo";
+    for (const [k, v] of [["x", "-50%"], ["y", "-50%"], ["width", "200%"], ["height", "200%"]]) f.setAttribute(k, v);
+    f.setAttribute("color-interpolation-filters", "sRGB");
+    gooBlur = document.createElementNS(NS, "feGaussianBlur");
+    gooBlur.setAttribute("in", "SourceGraphic");
+    gooBlur.setAttribute("stdDeviation", (dotMax * 0.45).toFixed(2));
+    const cm = document.createElementNS(NS, "feColorMatrix");
+    cm.setAttribute("type", "matrix");
+    // Keep each dot's own grey (it fades to white as it grows); only the
+    // alpha is thresholded
+    cm.setAttribute("values", "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -9");
+    f.append(gooBlur, cm);
+    defs.appendChild(f);
+    crisp = document.createElementNS(NS, "g");
+    crisp.setAttribute("class", "dots");
+    gooG = document.createElementNS(NS, "g");
+    gooG.setAttribute("class", "dots");
+    gooG.setAttribute("filter", "url(#dot-goo)");
+    svg.append(defs, crisp, gooG);
     hLines = [];
     vLines = [];
     const add = (list, vertical, pos) => {
-      const path = document.createElementNS(NS, "path");
-      svg.appendChild(path);
-      const l = { vertical, pos, path, progress: 0, cur: 0, at: 0.5, time: 0, grabbed: false, swinging: false };
-      draw(l, 0);
-      list.push(l);
+      list.push({ vertical, pos, progress: 0, cur: 0, at: 0.5, time: 0, grabbed: false, swinging: false });
     };
     for (let y = oy; y <= D; y += spacing) add(hLines, false, y);
     for (let x = ox; x <= W; x += spacing) add(vLines, true, x);
+    // One square per crossing
+    for (const h of hLines) {
+      for (const v of vLines) {
+        const el = document.createElementNS(NS, "path");
+        crisp.appendChild(el);
+        const d = { h, v, el, round: 0, x: NaN, y: NaN, n: NaN, a: NaN, inGoo: false, grey: -1 };
+        drawDot(d, v.pos, h.pos, 0);
+        dots.push(d);
+      }
+    }
 
     measureLetters();
   }
 
+  // The lines only carry state; the crossings are what gets drawn
   function draw(l, p) {
     l.cur = p;
-    if (l.vertical) {
-      const y = (D * l.at).toFixed(1);
-      l.path.setAttribute("d", `M${l.pos} 0 Q${(l.pos + p).toFixed(1)} ${y}, ${l.pos} ${D}`);
+  }
+
+  // Square (round = 0) to squircle (round = 1): superellipse with
+  // exponent n, drawn as a closed polygon fine enough for a few pixels
+  const SEG = 32;
+  const REST_GREY = 150; // ≈ 40 % black on white
+  const PEAK_GREY = 115; // ≈ 55 % — most visible while swinging out
+  const PEAK_AT = 0.35; // share of the full size where it is darkest
+  const COS = [];
+  const SIN = [];
+  for (let k = 0; k < SEG; k++) {
+    COS.push(Math.cos((k / SEG) * Math.PI * 2));
+    SIN.push(Math.sin((k / SEG) * Math.PI * 2));
+  }
+  function drawDot(d, x, y, round) {
+    const n = 30 - 26 * Math.pow(round, 0.7);
+    const a = dotHalf + (dotMax - dotHalf) * Math.pow(round, 1.2);
+    if (Math.abs(x - d.x) < 0.05 && Math.abs(y - d.y) < 0.05 && Math.abs(n - d.n) < 0.2 && Math.abs(a - d.a) < 0.05) return;
+    d.x = x;
+    d.y = y;
+    d.n = n;
+    d.a = a;
+    // Visibility arc: rest grey → darkest at mid size → white at full size
+    const grow = (a - dotHalf) / (dotMax - dotHalf);
+    let grey;
+    if (grow <= PEAK_AT) {
+      const t = grow / PEAK_AT;
+      grey = REST_GREY + (PEAK_GREY - REST_GREY) * t * t * (3 - 2 * t);
     } else {
-      const x = (W * l.at).toFixed(1);
-      l.path.setAttribute("d", `M0 ${l.pos} Q${x} ${(l.pos + p).toFixed(1)}, ${W} ${l.pos}`);
+      const t = (grow - PEAK_AT) / (1 - PEAK_AT);
+      grey = PEAK_GREY + (255 - PEAK_GREY) * t * t * (3 - 2 * t);
     }
+    grey = Math.round(grey);
+    if (grey !== d.grey) {
+      d.el.setAttribute("fill", `rgb(${grey},${grey},${grey})`);
+      d.grey = grey;
+    }
+    // Big enough to survive the goo threshold → melt with neighbours
+    const goo = a > dotHalf * 3;
+    if (goo !== d.inGoo) {
+      (goo ? gooG : crisp).appendChild(d.el);
+      d.inGoo = goo;
+    }
+    if (n > 29) {
+      d.el.setAttribute("d", `M${(x - a).toFixed(2)} ${(y - a).toFixed(2)}h${2 * a}v${2 * a}h${-2 * a}z`);
+      return;
+    }
+    const e = 2 / n;
+    let path = "";
+    for (let k = 0; k < SEG; k++) {
+      const c = COS[k];
+      const s = SIN[k];
+      const px = x + a * Math.sign(c) * Math.pow(Math.abs(c), e);
+      const py = y + a * Math.sign(s) * Math.pow(Math.abs(s), e);
+      path += `${k ? "L" : "M"}${px.toFixed(2)} ${py.toFixed(2)}`;
+    }
+    d.el.setAttribute("d", path + "z");
+  }
+
+  // Move every crossing with its two lines; round it while it moves
+  function moveDots() {
+    let settling = false;
+    const full = spacing * 0.2;
+    for (const d of dots) {
+      const dx = offsetAt(d.v, d.h.pos);
+      const dy = offsetAt(d.h, d.v.pos);
+      const target = Math.min(1, (Math.abs(dx) + Math.abs(dy)) / full);
+      // Round up quickly, sharpen back slowly
+      d.round += (target - d.round) * (target > d.round ? 0.35 : 0.08);
+      if (d.round < 0.01) d.round = 0;
+      else settling = true;
+      drawDot(d, d.v.pos + dx, d.h.pos + dy, d.round);
+    }
+    return settling;
   }
 
   // Offset of a line at position s along it (x for horizontal, y for vertical)
@@ -324,6 +438,7 @@
     }
     if (busy || moved) {
       moveLetters();
+      if (moveDots()) busy = true;
       moved = busy;
     }
     if (busy) kick();

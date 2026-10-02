@@ -116,14 +116,11 @@ a {
   pointer-events: none;
   overflow: visible;
 }
+/* Grid crossings: tiny grey squares that grow into melting squircles in
+   motion and fade towards white as they grow (fill set per dot in grid.js,
+   always opaque so the goo filter sees full alpha). */
 .bg-grid path {
-  fill: none;
-  stroke: rgba(0, 0, 0, 0.14);
-  stroke-width: 1;
-}
-/* Dense phone grid on sharp screens: finer lines */
-@media (max-width: 640px) and (min-resolution: 2dppx) {
-  .bg-grid path { stroke-width: 0.6; }
+  stroke: none;
 }
 
 #stage {
