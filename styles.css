@@ -440,3 +440,37 @@ a {
   }
   #tune-btn { right: 0.5rem; bottom: 0.75rem; }
 }
+/* Saves list in the settings menu */
+.tune-save {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+.tune-save input { margin: 0; accent-color: var(--ink); }
+.tune-save-name {
+  text-align: left;
+  padding: 0.3rem 0;
+  font-size: 12px;
+}
+.tune-save.is-current .tune-save-name { font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.tune-save-del {
+  width: 28px;
+  height: 28px;
+  text-align: center;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.5;
+}
+.tune-save-del:hover { opacity: 1; }
+.tune-add {
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.45rem;
+  text-align: center;
+  border: 1px dashed rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.tune-note { margin: 0.4rem 0 0; font-size: 11px; opacity: 0.5; line-height: 1.4; }
