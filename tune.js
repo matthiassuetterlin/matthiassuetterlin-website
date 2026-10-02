@@ -13,9 +13,10 @@
   const MS = window.msTune;
   const GRID = window.gridTune;
   const FLUID = window.fluidTune || {};
+  const MELT = window.meltTune || {};
   if (!MS || !GRID) return;
   const STORE = "ms-tune-saves-v1";
-  const DEFAULTS = { ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID } };
+  const DEFAULTS = { ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID }, melt: { ...MELT } };
 
   // Saves that ship with the site: 01 = the earlier look, 02 = the code defaults
   const BUILTIN = [
@@ -106,7 +107,23 @@
         ["outline", "Outline", "toggle"],
         ["outlineColor", "Farbe Outline", "color"],
         ["outlineWidth", "Stärke Outline", 0, 4, 0.1],
-        ["msMelt", "Verschmelzen mit MS", 0, 3, 0.05],
+      ],
+    },
+    {
+      title: "Verschmelzen MS ↔ Fluid",
+      target: MELT,
+      mode: "fluid",
+      rows: [
+        ["reach", "Abstand: Beginn (× Tropfen, 0 = aus)", 0, 4, 0.05],
+        ["overlap", "Ganz verschmolzen bei Überlappung", -1, 1.5, 0.05],
+        ["outlineFrom", "Kontur geht über – ab", 0, 1, 0.05],
+        ["outlineTo", "Kontur geht über – bis", 0, 1, 0.05],
+        ["colorFrom", "Farbe kommt – ab", 0, 1, 0.05],
+        ["colorTo", "Farbe kommt – bis", 0, 1, 0.05],
+        ["inSpeed", "Tempo hinein", 0.02, 1, 0.01],
+        ["outSpeed", "Tempo heraus (Farbe geht raus)", 0.02, 1, 0.01],
+        ["bridge", "Brücke zum Buchstaben", 0, 2, 0.05],
+        ["soften", "Weichheit des MS beim Verschmelzen", 0, 1.5, 0.05],
       ],
     },
     {
@@ -211,6 +228,7 @@
     Object.assign(MS, DEFAULTS.ms, save.ms);
     Object.assign(GRID, DEFAULTS.grid, save.grid);
     Object.assign(FLUID, DEFAULTS.fluid, save.fluid || {});
+    Object.assign(MELT, DEFAULTS.melt, save.melt || {});
     inputs.forEach((f) => f());
     if (window.gridRebuild) window.gridRebuild();
     if (window.fluidRefresh) window.fluidRefresh();
@@ -261,7 +279,7 @@
   addBtn.addEventListener("click", () => {
     const name = `Speicherung ${String(state.next).padStart(2, "0")}`;
     state.next += 1;
-    state.saves.push({ name, ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID } });
+    state.saves.push({ name, ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID }, melt: { ...MELT } });
     current = name;
     writeState();
     renderSaves();
@@ -356,7 +374,7 @@
   copy.type = "button";
   copy.textContent = "Werte kopieren";
   copy.addEventListener("click", async () => {
-    const text = JSON.stringify({ ms: MS, grid: GRID, fluid: FLUID }, null, 2);
+    const text = JSON.stringify({ ms: MS, grid: GRID, fluid: FLUID, melt: MELT }, null, 2);
     try {
       await navigator.clipboard.writeText(text);
       copy.textContent = "Kopiert ✓";
