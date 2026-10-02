@@ -50,14 +50,14 @@
   // How the drop melts into the MS (also read by fieldlines.js)
   const MT = (window.meltTune = Object.assign(
     {
-      reach: 0.5, // melting starts this far from a letter, × drop radius (0 = off)
-      overlap: 0.5, // fully melted once it overlaps a letter by this, × drop radius
+      reach: 4, // melting starts this far from a letter, × drop radius (0 = off)
+      overlap: 1.5, // fully melted once it overlaps a letter by this, × drop radius
       outlineFrom: 0, // progress (0–1) at which the outline starts to hand over …
       outlineTo: 1, // … and is gone
       colorFrom: 0, // progress at which the solid colour starts to grow …
       colorTo: 1, // … and is complete
-      inSpeed: 1, // how fast it melts in (1 = immediately)
-      outSpeed: 1, // how fast the colour drains out again
+      inSpeed: 0.33, // how fast it melts in (1 = immediately)
+      outSpeed: 0.33, // how fast the colour drains out again
       bridge: 1, // size of the bridge drops towards the letter
       soften: 0.5, // goo blur of the letters while a drop melts in, × MS merge
     },
