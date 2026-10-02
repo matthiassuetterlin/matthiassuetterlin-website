@@ -14,7 +14,7 @@ html, body {
   color: var(--ink);
   font-family: Helvetica, "Helvetica Neue", Arial, sans-serif;
 }
-body { overflow-x: clip; } /* full-width lines never cause sideways scroll */
+body { overflow-x: clip; } /* the grid never causes sideways scroll */
 
 button {
   font: inherit;
@@ -102,7 +102,26 @@ a {
 #btn-out[hidden] { display: none; }
 #crumb { margin: 0; opacity: 0.55; }
 
+/* Pluckable background grid (grid.js) */
+.bg-grid {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.bg-grid path {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.14);
+  stroke-width: 1;
+}
+
 #stage {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   min-height: 100dvh;
 }
@@ -125,9 +144,10 @@ a {
   align-items: center;
   overflow: visible;
 }
+/* Fade only — no slide, so text can be measured onto the grid at once */
 @keyframes enter {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .home-inner {
@@ -208,37 +228,7 @@ a {
 }
 .text-link:hover { opacity: 0.55; }
 
-/* Pluckable lines (string.js) */
-.string {
-  position: relative;
-  width: 100%;
-  height: 1px;
-  margin: 1.25rem 0 1.75rem;
-}
-.string svg {
-  position: absolute;
-  left: 0;
-  top: -250px;
-  width: 100vw;
-  height: 500px;
-  overflow: visible;
-  pointer-events: none;
-}
-.string path {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 1;
-}
-.string-hit {
-  position: absolute;
-  left: 0;
-  width: 100vw;
-  top: -20px;
-  height: 40px;
-  z-index: 1;
-  touch-action: none;
-}
-/* Tagline sits on one pluckable line instead of two underlines */
+/* Tagline without word underlines — the grid carries it */
 .tagline-wrap {
   position: relative;
   z-index: 4;
@@ -253,9 +243,11 @@ a {
 .tagline-wrap .text-link {
   border-bottom: 0;
 }
-.home-inner .string-home {
-  margin: 0.6rem 0 0;
-}
+
+/* Letters split by grid.js so they can ride the grid lines */
+.gw { white-space: nowrap; }
+.gc { display: inline-block; }
+.gp { display: inline-block; width: 0; height: 0; vertical-align: baseline; }
 
 .home-hint {
   margin: 2.5rem 0 0;
@@ -275,14 +267,14 @@ a {
 .panel h2 {
   margin: 0 0 1rem;
   font-size: clamp(2.4rem, 8vw, 4.5rem);
-  line-height: 0.95;
+  line-height: var(--grid, 0.95);
   letter-spacing: -0.035em;
   font-weight: 400;
 }
 .panel p {
   margin: 0 0 1em;
   font-size: 18px;
-  line-height: 1.7;
+  line-height: var(--lh, 1.7);
 }
 .eyebrow {
   margin: 0 0 0.75rem !important;
@@ -293,15 +285,15 @@ a {
 }
 .facts {
   list-style: none;
-  margin: 0 0 1.75rem;
+  margin: 0; /* spacing comes from the grid (grid.js) */
   padding: 0;
 }
 .facts li {
   position: relative;
   padding-left: 1.5em;
-  margin-bottom: 0.45em;
+  margin-bottom: 0;
   font-size: 17px;
-  line-height: 1.55;
+  line-height: var(--lh, 1.55);
 }
 .facts li::before {
   content: "–";
@@ -316,29 +308,30 @@ a {
 }
 .contact-block {
   font-size: 1.15rem !important;
-  line-height: 1.85 !important;
+  line-height: var(--lh, 1.85) !important;
 }
 
 .project-grid {
   display: grid;
-  gap: 1.25rem;
-  margin-top: 0.5rem;
+  gap: 0;
+  margin: 0;
 }
 .project-card {
   display: grid;
-  gap: 0.35rem;
-  padding: 1.1rem 0;
+  gap: 0;
+  padding: 0 0 0.5rem;
   border-top: 1px solid rgba(230, 232, 234, 0.35);
   width: 100%;
 }
 .project-card:last-child { border-bottom: 1px solid rgba(230, 232, 234, 0.35); }
 .project-name {
   font-size: clamp(2rem, 7vw, 3.4rem);
-  line-height: 1;
+  line-height: var(--grid, 1);
   letter-spacing: -0.03em;
 }
 .project-meta {
   font-size: 13px;
+  line-height: var(--lh, normal);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   opacity: 0.55;

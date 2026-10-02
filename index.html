@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <svg class="bg-grid" id="bg-grid" aria-hidden="true"></svg>
   <div id="guide" role="dialog" aria-labelledby="guide-title" aria-modal="true">
     <div class="guide-card">
       <p id="guide-title" class="guide-kicker">Kurz erklärt</p>
@@ -45,7 +46,6 @@
             <span class="sep">und</span>
             <button type="button" class="text-link" data-go="contact">Raumdesign</button>
           </p>
-          <div class="string-home" data-string></div>
         </div>
         <p class="home-hint">Bereiche öffnen durch Tippen</p>
       </div>
@@ -98,8 +98,8 @@
 
     <section class="view" id="view-fernen" data-view="fernen" aria-label="ferner.Welten" hidden>
       <div class="panel">
-        <p class="eyebrow">2012 · Diplomarbeit · Rhônegletscher</p>
         <h2>ferner.Welten — Zentrum für Glaziologie</h2>
+        <p class="eyebrow">2012 · Diplomarbeit · Rhônegletscher</p>
         <p>
           Forschungs- und Erlebniszentrum am Rhônegletscher (Wallis, Schweiz).
           Architektur als Plattform für Glaziologie, Bildung und Klimabewusstsein —
@@ -113,8 +113,8 @@
 
     <section class="view" id="view-adac" data-view="adac" aria-label="ADAC Mittelrhein" hidden>
       <div class="panel">
-        <p class="eyebrow">2014 · Arbeitswelt · BALS+WIRTH</p>
         <h2>ADAC Mittelrhein — Büroflächen Koblenz</h2>
+        <p class="eyebrow">2014 · Arbeitswelt · BALS+WIRTH</p>
         <p>
           Bürokonzept über zwei Geschosse (etwa 1.320&nbsp;m²) für den ADAC Mittelrhein.
           Dynamische Linien aus dem Thema Mobilität — Mitarbeit bei
@@ -128,8 +128,8 @@
 
     <section class="view" id="view-dreamco" data-view="dreamco" aria-label="DreamCo" hidden>
       <div class="panel">
-        <p class="eyebrow">2023–24 · Installation · VAVE · KI</p>
         <h2>DreamCo — Imagining your dreams</h2>
+        <p class="eyebrow">2023–24 · Installation · VAVE · KI</p>
         <p>
           Interaktive KI-Installation (Design Shanghai): Traumbeschreibungen und
           Selfies werden zu persönlichen Bildern. Art Direction bei VAVE;
@@ -160,6 +160,6 @@
 
   <script src="universe.js"></script>
   <script src="fieldlines.js"></script>
-  <script src="string.js"></script>
+  <script src="grid.js"></script>
 </body>
 </html>
