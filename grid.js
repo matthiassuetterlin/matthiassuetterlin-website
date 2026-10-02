@@ -8,10 +8,11 @@
    * snaps free and swings out like a plucked string.
    *
    * The lines themselves are invisible: only their crossings are drawn, as
-   * small squares that ride both lines. A square at rest is crisp; as soon
-   * as it moves its corners round into a squircle (superellipse
-   * |x|^n + |y|^n = 1, n from ~30 down to 4) and it sharpens again when
-   * it settles.
+   * tiny squares that ride both lines. As soon as one moves it grows and
+   * its corners round into a squircle (superellipse |x|^n + |y|^n = 1,
+   * n from ~30 down to 4); moving dots sit under a goo filter like the MS,
+   * so when they come close they melt into each other. Settling, they
+   * shrink and sharpen back into tiny squares.
    *
    * Text hangs on the grid: main text (titles, project names, tagline)
    * stands above a grid line with a clear gap, its sub text hangs below the
@@ -34,7 +35,11 @@
 
   let hLines = [];
   let dots = [];
-  let dotHalf = 3;
+  let dotHalf = 1; // half size at rest
+  let dotMax = 11; // half size in full motion
+  let crisp = null;
+  let gooG = null;
+  let gooBlur = null;
   let vLines = [];
   let letters = [];
   let W = 0;
@@ -246,7 +251,28 @@
     svg.style.height = `${D}px`;
     svg.textContent = "";
     dots = [];
-    dotHalf = Math.max(2, Math.round(spacing * 0.055));
+    dotHalf = Math.max(0.75, spacing * 0.014);
+    dotMax = Math.max(5, spacing * 0.16);
+    // Resting dots stay crisp; moving ones go into the goo group
+    const defs = document.createElementNS(NS, "defs");
+    const f = document.createElementNS(NS, "filter");
+    f.id = "dot-goo";
+    for (const [k, v] of [["x", "-50%"], ["y", "-50%"], ["width", "200%"], ["height", "200%"]]) f.setAttribute(k, v);
+    f.setAttribute("color-interpolation-filters", "sRGB");
+    gooBlur = document.createElementNS(NS, "feGaussianBlur");
+    gooBlur.setAttribute("in", "SourceGraphic");
+    gooBlur.setAttribute("stdDeviation", (dotMax * 0.45).toFixed(2));
+    const cm = document.createElementNS(NS, "feColorMatrix");
+    cm.setAttribute("type", "matrix");
+    cm.setAttribute("values", "0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 24 -9");
+    f.append(gooBlur, cm);
+    defs.appendChild(f);
+    crisp = document.createElementNS(NS, "g");
+    crisp.setAttribute("class", "dots");
+    gooG = document.createElementNS(NS, "g");
+    gooG.setAttribute("class", "dots");
+    gooG.setAttribute("filter", "url(#dot-goo)");
+    svg.append(defs, crisp, gooG);
     hLines = [];
     vLines = [];
     const add = (list, vertical, pos) => {
@@ -258,8 +284,8 @@
     for (const h of hLines) {
       for (const v of vLines) {
         const el = document.createElementNS(NS, "path");
-        svg.appendChild(el);
-        const d = { h, v, el, round: 0, x: NaN, y: NaN, n: NaN };
+        crisp.appendChild(el);
+        const d = { h, v, el, round: 0, x: NaN, y: NaN, n: NaN, a: NaN, inGoo: false };
         drawDot(d, v.pos, h.pos, 0);
         dots.push(d);
       }
@@ -284,11 +310,18 @@
   }
   function drawDot(d, x, y, round) {
     const n = 30 - 26 * Math.pow(round, 0.7);
-    if (Math.abs(x - d.x) < 0.05 && Math.abs(y - d.y) < 0.05 && Math.abs(n - d.n) < 0.2) return;
+    const a = dotHalf + (dotMax - dotHalf) * Math.pow(round, 1.2);
+    if (Math.abs(x - d.x) < 0.05 && Math.abs(y - d.y) < 0.05 && Math.abs(n - d.n) < 0.2 && Math.abs(a - d.a) < 0.05) return;
     d.x = x;
     d.y = y;
     d.n = n;
-    const a = dotHalf;
+    d.a = a;
+    // Big enough to survive the goo threshold → melt with neighbours
+    const goo = a > dotHalf * 3;
+    if (goo !== d.inGoo) {
+      (goo ? gooG : crisp).appendChild(d.el);
+      d.inGoo = goo;
+    }
     if (n > 29) {
       d.el.setAttribute("d", `M${(x - a).toFixed(2)} ${(y - a).toFixed(2)}h${2 * a}v${2 * a}h${-2 * a}z`);
       return;
