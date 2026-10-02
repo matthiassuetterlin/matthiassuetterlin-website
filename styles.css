@@ -115,10 +115,12 @@ a {
   z-index: 0;
   pointer-events: none;
   overflow: visible;
+  /* Tint the whole layer once so melting shapes don't darken where they overlap */
+  opacity: 0.32;
 }
-/* Grid crossings: small squares that round into squircles as they move */
+/* Grid crossings: tiny squares that grow into squircles as they move */
 .bg-grid path {
-  fill: rgba(0, 0, 0, 0.32);
+  fill: #000;
   stroke: none;
 }
 

@@ -8,10 +8,11 @@
    * snaps free and swings out like a plucked string.
    *
    * The lines themselves are invisible: only their crossings are drawn, as
-   * small squares that ride both lines. A square at rest is crisp; as soon
-   * as it moves its corners round into a squircle (superellipse
-   * |x|^n + |y|^n = 1, n from ~30 down to 4) and it sharpens again when
-   * it settles.
+   * tiny squares that ride both lines. A square at rest is small and crisp;
+   * as soon as it moves it grows and its corners round into a squircle
+   * (superellipse |x|^n + |y|^n = 1, n from ~30 down to 4), shrinking and
+   * sharpening again when it settles. Crossings that come close melt into
+   * each other through a gooey neck, the way M and S do.
    *
    * Text hangs on the grid: main text (titles, project names, tagline)
    * stands above a grid line with a clear gap, its sub text hangs below the
@@ -34,7 +35,10 @@
 
   let hLines = [];
   let dots = [];
-  let dotHalf = 3;
+  let dotHalf = 1;
+  let dotBig = 8;
+  let necks = [];
+  let necksUsed = 0;
   let vLines = [];
   let letters = [];
   let W = 0;
@@ -246,7 +250,11 @@
     svg.style.height = `${D}px`;
     svg.textContent = "";
     dots = [];
-    dotHalf = Math.max(2, Math.round(spacing * 0.055));
+    necks = [];
+    necksUsed = 0;
+    // Tiny squares at rest, squircles of about a quarter step in motion
+    dotHalf = Math.max(0.9, spacing * 0.022);
+    dotBig = Math.max(4, spacing * 0.13);
     hLines = [];
     vLines = [];
     const add = (list, vertical, pos) => {
@@ -259,7 +267,7 @@
       for (const v of vLines) {
         const el = document.createElementNS(NS, "path");
         svg.appendChild(el);
-        const d = { h, v, el, round: 0, x: NaN, y: NaN, n: NaN };
+        const d = { h, v, el, round: 0, near: 0, px: v.pos, py: h.pos, x: NaN, y: NaN, n: NaN, a: NaN };
         drawDot(d, v.pos, h.pos, 0);
         dots.push(d);
       }
@@ -274,7 +282,8 @@
   }
 
   // Square (round = 0) to squircle (round = 1): superellipse with
-  // exponent n, drawn as a closed polygon fine enough for a few pixels
+  // exponent n, drawn as a closed polygon fine enough for a few pixels.
+  // A crossing at rest is a tiny square; in motion it grows to a squircle.
   const SEG = 32;
   const COS = [];
   const SIN = [];
@@ -282,15 +291,19 @@
     COS.push(Math.cos((k / SEG) * Math.PI * 2));
     SIN.push(Math.sin((k / SEG) * Math.PI * 2));
   }
+  function halfOf(round) {
+    return lerp(dotHalf, dotBig, Math.pow(round, 0.8));
+  }
   function drawDot(d, x, y, round) {
     const n = 30 - 26 * Math.pow(round, 0.7);
-    if (Math.abs(x - d.x) < 0.05 && Math.abs(y - d.y) < 0.05 && Math.abs(n - d.n) < 0.2) return;
+    const a = halfOf(round);
+    if (Math.abs(x - d.x) < 0.05 && Math.abs(y - d.y) < 0.05 && Math.abs(n - d.n) < 0.2 && Math.abs(a - d.a) < 0.03) return;
     d.x = x;
     d.y = y;
     d.n = n;
-    const a = dotHalf;
+    d.a = a;
     if (n > 29) {
-      d.el.setAttribute("d", `M${(x - a).toFixed(2)} ${(y - a).toFixed(2)}h${2 * a}v${2 * a}h${-2 * a}z`);
+      d.el.setAttribute("d", `M${(x - a).toFixed(2)} ${(y - a).toFixed(2)}h${(2 * a).toFixed(2)}v${(2 * a).toFixed(2)}h${(-2 * a).toFixed(2)}z`);
       return;
     }
     const e = 2 / n;
@@ -305,20 +318,112 @@
     d.el.setAttribute("d", path + "z");
   }
 
-  // Move every crossing with its two lines; round it while it moves
+  // Gooey neck between two round blobs (metaball connector after
+  // Hiroyuki Sato): two tangents with bezier handles that thin out and
+  // tear as the blobs drift apart — the same melting as M and S.
+  function neck(x1, y1, r1, x2, y2, r2) {
+    const d = Math.hypot(x2 - x1, y2 - y1);
+    const maxDist = r1 + r2 * 2.5;
+    if (r1 <= 0 || r2 <= 0 || d > maxDist || d <= Math.abs(r1 - r2)) return "";
+    const v = 0.5;
+    let u1 = 0;
+    let u2 = 0;
+    if (d < r1 + r2) {
+      u1 = Math.acos(Math.max(-1, Math.min(1, (r1 * r1 + d * d - r2 * r2) / (2 * r1 * d))));
+      u2 = Math.acos(Math.max(-1, Math.min(1, (r2 * r2 + d * d - r1 * r1) / (2 * r2 * d))));
+    }
+    const ab = Math.atan2(y2 - y1, x2 - x1);
+    const spread = Math.acos(Math.max(-1, Math.min(1, (r1 - r2) / d)));
+    const a1 = ab + u1 + (spread - u1) * v;
+    const a2 = ab - u1 - (spread - u1) * v;
+    const a3 = ab + Math.PI - u2 - (Math.PI - u2 - spread) * v;
+    const a4 = ab - Math.PI + u2 + (Math.PI - u2 - spread) * v;
+    const p1x = x1 + r1 * Math.cos(a1);
+    const p1y = y1 + r1 * Math.sin(a1);
+    const p2x = x1 + r1 * Math.cos(a2);
+    const p2y = y1 + r1 * Math.sin(a2);
+    const p3x = x2 + r2 * Math.cos(a3);
+    const p3y = y2 + r2 * Math.sin(a3);
+    const p4x = x2 + r2 * Math.cos(a4);
+    const p4y = y2 + r2 * Math.sin(a4);
+    const hs = Math.min(v * 2.4, Math.hypot(p3x - p1x, p3y - p1y) / (r1 + r2)) * Math.min(1, (d * 2) / (r1 + r2));
+    const H = Math.PI / 2;
+    const f = (n) => n.toFixed(2);
+    const h1x = p1x + r1 * hs * Math.cos(a1 - H);
+    const h1y = p1y + r1 * hs * Math.sin(a1 - H);
+    const h2x = p2x + r1 * hs * Math.cos(a2 + H);
+    const h2y = p2y + r1 * hs * Math.sin(a2 + H);
+    const h3x = p3x + r2 * hs * Math.cos(a3 + H);
+    const h3y = p3y + r2 * hs * Math.sin(a3 + H);
+    const h4x = p4x + r2 * hs * Math.cos(a4 - H);
+    const h4y = p4y + r2 * hs * Math.sin(a4 - H);
+    return (
+      `M${f(p1x)} ${f(p1y)}C${f(h1x)} ${f(h1y)} ${f(h3x)} ${f(h3y)} ${f(p3x)} ${f(p3y)}` +
+      `A${f(r2)} ${f(r2)} 0 ${d > r1 ? 1 : 0} 0 ${f(p4x)} ${f(p4y)}` +
+      `C${f(h4x)} ${f(h4y)} ${f(h2x)} ${f(h2y)} ${f(p2x)} ${f(p2y)}z`
+    );
+  }
+
+  // Move every crossing with its two lines; grow and round it while it
+  // moves, and let crossings that come close melt into each other
   function moveDots() {
     let settling = false;
     const full = spacing * 0.2;
+    // Positions and motion
     for (const d of dots) {
       const dx = offsetAt(d.v, d.h.pos);
       const dy = offsetAt(d.h, d.v.pos);
+      d.px = d.v.pos + dx;
+      d.py = d.h.pos + dy;
       const target = Math.min(1, (Math.abs(dx) + Math.abs(dy)) / full);
       // Round up quickly, sharpen back slowly
       d.round += (target - d.round) * (target > d.round ? 0.35 : 0.08);
       if (d.round < 0.01) d.round = 0;
       else settling = true;
-      drawDot(d, d.v.pos + dx, d.h.pos + dy, d.round);
+      d.near = 0;
     }
+    // Neighbours a moving crossing comes close to swell toward it
+    const reach = spacing * 0.75;
+    const pairs = [];
+    const cols = vLines.length;
+    const rows = hLines.length;
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        const d = dots[i * cols + j];
+        if (!d.round) continue;
+        for (let ii = Math.max(0, i - 2); ii <= Math.min(rows - 1, i + 2); ii++) {
+          for (let jj = Math.max(0, j - 2); jj <= Math.min(cols - 1, j + 2); jj++) {
+            const k = ii * cols + jj;
+            const o = dots[k];
+            if (o === d || (o.round && k < i * cols + j)) continue;
+            const dist = Math.hypot(o.px - d.px, o.py - d.py);
+            if (dist >= reach) continue;
+            const t = 1 - dist / reach;
+            const pull = t * t * (3 - 2 * t);
+            d.near = Math.max(d.near, pull);
+            o.near = Math.max(o.near, pull);
+            pairs.push(d, o);
+          }
+        }
+      }
+    }
+    for (const d of dots) drawDot(d, d.px, d.py, Math.max(d.round, d.near));
+    // Necks between crossings that are close enough to melt
+    let used = 0;
+    for (let p = 0; p < pairs.length; p += 2) {
+      const a = pairs[p];
+      const b = pairs[p + 1];
+      const path = neck(a.px, a.py, a.a, b.px, b.py, b.a);
+      if (!path) continue;
+      if (used === necks.length) {
+        const el = document.createElementNS(NS, "path");
+        svg.appendChild(el);
+        necks.push(el);
+      }
+      necks[used++].setAttribute("d", path);
+    }
+    for (let k = used; k < necksUsed; k++) necks[k].setAttribute("d", "");
+    necksUsed = used;
     return settling;
   }
 
