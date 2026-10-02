@@ -43,7 +43,7 @@ a {
   z-index: 100;
   display: grid;
   place-items: center;
-  background: rgba(30, 32, 34, 0.92);
+  background: rgba(255, 255, 255, 0.72);
   padding: 1.5rem;
   transition: opacity 0.6s var(--ease), visibility 0.6s;
 }
@@ -54,10 +54,11 @@ a {
 }
 .guide-card {
   max-width: 28rem;
-  border: 1px solid rgba(230, 232, 234, 0.35);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   padding: 1.5rem 1.6rem 1.35rem;
-  background: #25282b;
+  background: #fff;
   color: var(--ink);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
 }
 .guide-kicker {
   margin: 0 0 0.6rem;
@@ -142,51 +143,86 @@ a {
 }
 .ms-stage {
   position: relative;
-  display: inline-block;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   max-width: 100%;
   margin: 0 auto;
-  /* letters only — no interaction / paint bound */
 }
 
-/* Full-page morph surface — no letter-box edge */
-.ms-canvas {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  width: 100dvw;
-  height: 100vh;
-  height: 100dvh;
-  pointer-events: none;
-  z-index: 1;
+/* Gooey MS mark — restrained SVG filter morph */
+.ms-gooey {
+  display: block;
+  width: min(92vw, 36rem);
+  height: auto;
+  margin: 0 auto;
+  overflow: visible;
 }
-.view-home:not(.is-active) .ms-canvas {
+.ms-paths {
+  display: none;
+}
+.ms-circles circle {
+  fill: #0a0a0a;
+}
+.view-home:not(.is-active) .ms-gooey {
   visibility: hidden;
 }
+
+/* Invisible hit targets over the mark (M / S → about) */
 .mega {
-  position: relative;
+  position: absolute;
+  inset: 0 8% 18%;
   z-index: 3;
   margin: 0;
   display: flex;
   justify-content: center;
-  gap: 0.1em;
+  gap: 0;
   font-family: "Playfair Display", "Times New Roman", Times, serif;
   font-size: clamp(7rem, 40vw, 22rem);
   line-height: 0.82;
   letter-spacing: -0.04em;
   font-weight: 700;
+  pointer-events: none;
 }
 .mega .letter {
   display: block;
-  min-width: 0.55em;
-  min-height: 0.82em;
+  flex: 1;
+  min-width: 0;
+  min-height: 100%;
   line-height: 0.82;
   font-family: inherit;
-  font-weight: inherit; /* keep Playfair 700 — do not lighten */
+  font-weight: inherit;
   color: transparent;
   -webkit-text-stroke: 0;
+  pointer-events: auto;
+  cursor: pointer;
 }
 .mega .letter:hover {
   color: transparent;
+}
+
+.ms-states {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin: 0.85rem 0 0;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.ms-states button {
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+  color: inherit;
+  transition: color 0.25s var(--ease), border-color 0.25s var(--ease);
+}
+.ms-states button:hover {
+  color: var(--ink);
+}
+.ms-states button.is-active {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
 }
 
 .tagline {
@@ -208,10 +244,10 @@ a {
 .text-link:hover { opacity: 0.55; }
 
 .home-hint {
-  margin: 2.5rem 0 0;
-  font-size: 14px;
-  letter-spacing: 0.06em;
-  opacity: 0.45;
+  margin: 2rem 0 0;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  opacity: 0.4;
   color: var(--ink);
   text-align: center;
 }

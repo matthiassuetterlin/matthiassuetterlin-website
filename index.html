@@ -31,20 +31,36 @@
   <div id="stage">
     <!-- Home: crisp 1:1 typography, no CSS upscaling -->
     <section class="view view-home is-active" id="view-home" data-view="home" aria-label="Start">
-      <canvas class="ms-canvas" id="ms-canvas" aria-hidden="true"></canvas>
       <div class="home-inner">
         <div class="ms-stage" id="ms-stage" aria-label="Matthias Sütterlin">
+          <svg class="ms-gooey" id="ms-gooey" viewBox="0 0 320 260" role="img" aria-hidden="true">
+            <defs>
+              <filter id="ms-goo" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="blur" />
+                <feColorMatrix in="blur" mode="matrix"
+                  values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 23 -13"
+                  result="goo" />
+              </filter>
+            </defs>
+            <g id="ms-paths" class="ms-paths"></g>
+            <g id="ms-circles" class="ms-circles" filter="url(#ms-goo)"></g>
+          </svg>
           <h1 class="mega">
             <button type="button" class="letter letter-m" id="letter-m" data-go="about" aria-label="Über mich öffnen">M</button>
             <button type="button" class="letter letter-s" id="letter-s" data-go="about" aria-label="Über mich öffnen">S</button>
           </h1>
+          <div class="ms-states" role="group" aria-label="MS-Form">
+            <button type="button" data-ms-shape="0" aria-pressed="false">M</button>
+            <button type="button" data-ms-shape="1" class="is-active" aria-pressed="true">MS</button>
+            <button type="button" data-ms-shape="2" aria-pressed="false">S</button>
+          </div>
         </div>
         <p class="tagline">
           <button type="button" class="text-link" data-go="projects">Innenarchitektur</button>
           <span class="sep">und</span>
           <button type="button" class="text-link" data-go="contact">Raumdesign</button>
         </p>
-        <p class="home-hint">Bereiche öffnen durch Tippen · Maus über die ganze Seite · nach außen strecken</p>
+        <p class="home-hint">Tippen öffnet die Bereiche</p>
       </div>
     </section>
 
@@ -156,6 +172,6 @@
   </div>
 
   <script src="universe.js"></script>
-  <script src="fieldlines.js"></script>
+  <script src="gooey-ms.js"></script>
 </body>
 </html>

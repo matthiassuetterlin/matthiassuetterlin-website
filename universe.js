@@ -79,6 +79,9 @@
     if (sessionStorage.getItem("ms-guide-seen") === "1") {
       guide.classList.add("is-gone");
     }
+    if (new URLSearchParams(location.search).has("noguide")) {
+      guide.classList.add("is-gone");
+    }
   } catch (_) {}
 
   show("home");
