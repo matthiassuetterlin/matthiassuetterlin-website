@@ -20,4 +20,7 @@ Projekt-Platzhalter: *ferner.Welten / Zentrum für Glaziologie*, ADAC Mittelrhei
 python3 -m http.server 8000
 ```
 
-GitHub Pages ist noch nicht aktiviert.
+## Veröffentlichung
+
+Jeder Push auf `main` veröffentlicht die Seite über GitHub Pages
+(Workflow `.github/workflows/pages.yml`, Quelle in den Pages-Einstellungen: „GitHub Actions“).
