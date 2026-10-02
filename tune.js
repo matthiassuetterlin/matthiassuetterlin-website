@@ -106,6 +106,7 @@
         ["outline", "Outline", "toggle"],
         ["outlineColor", "Farbe Outline", "color"],
         ["outlineWidth", "Stärke Outline", 0, 4, 0.1],
+        ["msMelt", "Verschmelzen mit MS", 0, 3, 0.05],
       ],
     },
     {

@@ -20,6 +20,7 @@
   const root = document.documentElement;
   const stage = document.getElementById("stage");
   const letterM = document.getElementById("letter-m");
+  const letterS = document.getElementById("letter-s");
   const MODE_KEY = "ms-fx-mode";
   const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;
 
@@ -42,6 +43,7 @@
       outline: true,
       outlineColor: "#000000",
       outlineWidth: 1, // px
+      msMelt: 1, // reach within which the drop melts into the MS, × 2 drop radii (0 = off)
     },
     window.fluidTune || {}
   ));
@@ -429,8 +431,45 @@ void main() {
     return moving;
   }
 
+  // --- Melting into the MS --------------------------------------------------------
+  // Near the M or the S a drop hands its mass over to the MS goo
+  // (fieldlines.js reads window.fxMelt): its outline shape shrinks while a
+  // solid drop of the same size grows inside the goo and melts with the
+  // letters. Moving away reverses it.
+  const melt = [];
+  window.fxMelt = melt;
+  let msRects = null;
+  let msAge = 99;
+  function readMs() {
+    msRects = null;
+    if (!letterM || !letterS) return;
+    const a = letterM.getBoundingClientRect();
+    const b = letterS.getBoundingClientRect();
+    if (a.width < 2 || b.width < 2) return;
+    msRects = [a, b];
+  }
+  function msDist(x, y) {
+    let d = Infinity;
+    for (const r of msRects) {
+      const dx = Math.max(r.left - x, 0, x - r.right);
+      const dy = Math.max(r.top - y, 0, y - r.bottom);
+      d = Math.min(d, Math.hypot(dx, dy));
+    }
+    return d;
+  }
+  function smoothstep(a, b, x) {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  }
+
   const dropData = new Float32Array(MAX * 4);
   function draw() {
+    if (++msAge > 20) {
+      msAge = 0;
+      readMs();
+    }
+    const zone = R * 2 * T.msMelt;
+    melt.length = 0;
     const scale = presence * (T.rest + (1 - T.rest) * Math.min(1, energy));
     const n = drops.length;
     let x0 = Infinity;
@@ -439,7 +478,10 @@ void main() {
     let y1 = -Infinity;
     for (let i = 0; i < n; i++) {
       const d = drops[i];
-      const r = R * scale * (1 - T.taper * (n > 1 ? i / (n - 1) : 0));
+      const full = R * scale * (1 - T.taper * (n > 1 ? i / (n - 1) : 0));
+      const m = msRects && zone > 0 ? 1 - smoothstep(0, zone, msDist(d.x, d.y)) : 0;
+      if (m > 0.001 && full > 0.3) melt.push({ x: d.x, y: d.y, r: full * m, m });
+      const r = full * (1 - m);
       dropData[i * 4] = d.x;
       dropData[i * 4 + 1] = d.y;
       dropData[i * 4 + 2] = r;
@@ -490,6 +532,7 @@ void main() {
     raf = null;
     if (mode !== "fluid") {
       lastT = 0;
+      melt.length = 0;
       if (shown) {
         gl.disable(gl.SCISSOR_TEST);
         gl.clear(gl.COLOR_BUFFER_BIT);
@@ -555,6 +598,7 @@ void main() {
     { passive: true }
   );
   window.addEventListener("resize", () => {
+    msAge = 99;
     resize();
     kick();
   });

@@ -78,6 +78,10 @@
   for (let i = 0; i < CHAIN + SATELLITES; i++) {
     drops.push({ node: el("circle", { r: "0", cx: "0", cy: "0" }, goo), x: NaN, y: NaN });
   }
+  // The pointer's liquid drop (fluid.js) melting into the letters
+  const FLUID = 12;
+  const fluidNodes = [];
+  for (let i = 0; i < FLUID; i++) fluidNodes.push(el("circle", { r: "0", cx: "0", cy: "0" }, goo));
 
   function clamp(v, a, b) {
     return v < a ? a : v > b ? b : v;
@@ -246,8 +250,12 @@
     hole.setAttribute("cy", (G.s.y + offSy + G.fontPx * 0.12).toFixed(1));
     hole.setAttribute("r", (G.fontPx * T.hole * Math.pow(cc, 0.8)).toFixed(1));
 
-    // Goo: blur radius and threshold grow with closeness
-    const sigma = lerp(0.9, H * T.merge, Math.pow(cc, 1.15));
+    // Goo: blur radius and threshold grow with closeness — and with the
+    // pointer's drop melting in, so it flows into the letters
+    const melt = window.fxMelt || [];
+    let meltMax = 0;
+    for (const d of melt) meltMax = Math.max(meltMax, d.m);
+    const sigma = Math.max(lerp(0.9, H * T.merge, Math.pow(cc, 1.15)), lerp(0.9, H * T.merge * 0.5, meltMax));
     const thr = lerp(0.5, T.mass, cc);
     // Thicken the glyphs as the goo grows so hairlines melt instead of vanishing
     const sw = (sigma * T.thicken).toFixed(2);
@@ -286,6 +294,18 @@
       d.node.setAttribute("cx", d.x.toFixed(1));
       d.node.setAttribute("cy", d.y.toFixed(1));
       d.node.setAttribute("r", Math.max(0, r).toFixed(1));
+    }
+    // Melting drop: the blur eats into small circles, so they get a little
+    // extra radius to keep their size
+    for (let i = 0; i < FLUID; i++) {
+      const d = melt[i];
+      const node = fluidNodes[i];
+      const r = d ? d.r + sigma * 0.9 * d.m : 0;
+      node.setAttribute("r", r.toFixed(1));
+      if (d) {
+        node.setAttribute("cx", d.x.toFixed(1));
+        node.setAttribute("cy", d.y.toFixed(1));
+      }
     }
     // Satellites: mass drawn out toward the pointer
     for (let j = 0; j < SATELLITES; j++) {
