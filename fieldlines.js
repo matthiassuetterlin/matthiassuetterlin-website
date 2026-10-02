@@ -186,7 +186,7 @@
     const cc = clamp(c, 0, 1);
 
     // Far: letters drift apart. Centre: pulled into each other.
-    const spread = W * 0.14;
+    const spread = W * 0.04;
     const pull = G.gap * 0.5 + W * 0.1;
     spring(sep, lerp(spread, -pull, c), 0.1, 0.78);
 

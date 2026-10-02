@@ -42,6 +42,30 @@
   const ptr = { x: NaN, y: NaN };
   const calm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  // Haptic tick. Android: Vibration API. iOS has none for the web, but
+  // Safari (iOS 18+) ticks when a native switch toggles — so toggle a
+  // hidden one. Only works inside a touch gesture; elsewhere it's a no-op.
+  let iosSwitch = null;
+  if (!navigator.vibrate) {
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.setAttribute("switch", "");
+    input.id = "grid-haptic";
+    input.tabIndex = -1;
+    const label = document.createElement("label");
+    label.htmlFor = input.id;
+    const wrap = document.createElement("div");
+    wrap.setAttribute("aria-hidden", "true");
+    wrap.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden";
+    wrap.append(input, label);
+    document.body.appendChild(wrap);
+    iosSwitch = label;
+  }
+  function haptic() {
+    if (navigator.vibrate) navigator.vibrate(6);
+    else if (iosSwitch) iosSwitch.click();
+  }
+
   function lerp(a, b, t) {
     return a + (b - a) * t;
   }
@@ -326,7 +350,7 @@
         if (Math.abs(pull) > snap) {
           release(l);
           // A short tick under the finger when a line snaps free (Android)
-          if (snap > snapDist && navigator.vibrate) navigator.vibrate(6);
+          if (snap > snapDist) haptic();
           continue;
         }
         l.progress = pull * 2;
@@ -375,6 +399,7 @@
           let pull = e.pageY - l.pos;
           if (Math.abs(pull) < spacing * 0.25) pull = spacing * 0.5 * (pull < 0 ? -1 : 1);
           flick(l, e.pageX, pull * 2.4);
+          haptic();
         }
       }
       down = null;

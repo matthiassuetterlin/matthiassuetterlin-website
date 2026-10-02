@@ -202,7 +202,7 @@ a {
   margin: 0;
   display: flex;
   justify-content: center;
-  gap: 0.1em;
+  gap: 0.03em;
   font-family: "Playfair Display", "Times New Roman", Times, serif;
   font-size: clamp(7rem, 40vw, 22rem);
   line-height: 0.82;
