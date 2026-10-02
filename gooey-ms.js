@@ -1,10 +1,9 @@
 (() => {
   /**
-   * Gooey MS — uniform contour across M / MS / S.
-   * One rendering mode only: circle skeletons + fixed goo filter.
-   * No crisp SVG stamp crossfade (that caused soft vs sharp dual edges).
-   * X scrubs M ↔ MS ↔ S; Y adds subtle 2D life. Contour weight/sharpness
-   * stay constant so morph regions match unchanged letter parts.
+   * gooey-olgiati-bridge — uniform sharp contour, Olgiati-style mid bridge.
+   * Mid-scrub: organic bone-like bridge (pinched waist) between M right stem
+   * and S mid, same black material as letters. Continuous pointer morph M↔MS↔S.
+   * One rendering mode: circle skeletons + locked goo filter (no soft overlay).
    */
   const home = document.getElementById("view-home");
   const circlesLayer = document.getElementById("ms-circles");
@@ -14,54 +13,68 @@
   if (!home || !circlesLayer || !pathsLayer) return;
 
   // viewBox 0 0 320 260 — Playfair-like serif centerlines
+  // MS path routes through M, crosses a pinched bone bridge, then S.
   const PATHS = {
     m:
-      "M 16,224 " +
-      "C 20,238 46,240 60,230 " +
-      "L 64,222 L 64,38 " +
-      "C 64,26 52,22 30,22 " +
-      "L 18,22 L 64,22 L 64,46 " +
-      "L 64,222 L 64,46 " +
-      "L 113,186 L 162,46 " +
-      "L 162,22 L 208,22 L 192,22 " +
-      "C 172,22 162,26 162,38 " +
-      "L 162,222 L 162,46 L 162,222 " +
-      "L 166,230 " +
-      "C 180,240 208,238 212,224",
+      "M 18,224 " +
+      "C 22,236 48,238 60,228 " +
+      "L 64,218 L 64,40 " +
+      "C 64,28 52,24 30,24 " +
+      "L 18,24 L 64,24 L 64,48 " +
+      "L 64,214 L 64,48 " +
+      "L 112,180 L 160,48 " +
+      "L 160,24 L 206,24 L 190,24 " +
+      "C 170,24 160,28 160,40 " +
+      "L 160,214 L 160,48 L 160,214 " +
+      "L 164,228 " +
+      "C 178,238 206,236 210,222",
     s:
-      "M 292,62 " +
-      "C 290,34 264,18 230,18 " +
-      "C 188,18 150,40 144,82 " +
-      "C 138,120 170,140 218,154 " +
-      "C 266,168 300,188 296,224 " +
-      "C 292,258 256,270 210,264 " +
-      "C 172,258 142,238 136,206",
+      "M 292,58 " +
+      "C 290,30 264,14 230,14 " +
+      "C 188,14 150,36 144,78 " +
+      "C 138,116 170,136 218,150 " +
+      "C 266,164 300,184 296,220 " +
+      "C 292,254 256,266 210,260 " +
+      "C 172,254 142,234 136,202",
     ms:
-      "M 14,224 " +
-      "C 18,238 40,240 52,230 " +
-      "L 56,222 L 56,38 " +
-      "C 56,26 46,22 28,22 " +
-      "L 18,22 L 56,22 L 56,46 " +
-      "L 56,210 L 56,46 " +
-      "L 98,178 L 140,46 " +
-      "L 140,22 L 170,22 L 158,22 " +
-      "C 146,22 140,26 140,38 " +
-      "L 140,200 " +
-      "C 146,244 192,260 232,240 " +
-      "C 270,222 286,176 256,146 " +
-      "C 230,120 190,128 192,160 " +
-      "C 194,188 226,202 264,186 " +
-      "C 290,172 308,190 304,222 " +
-      "C 300,256 262,270 218,262 " +
-      "C 182,254 152,236 146,208",
+      // M body (slightly tighter)
+      "M 16,224 " +
+      "C 20,236 42,238 54,228 " +
+      "L 58,218 L 58,40 " +
+      "C 58,28 48,24 30,24 " +
+      "L 18,24 L 58,24 L 58,48 " +
+      "L 58,210 L 58,48 " +
+      "L 100,176 L 142,48 " +
+      "L 142,24 L 172,24 L 160,24 " +
+      "C 148,24 142,28 142,40 " +
+      // right stem → bridge attach
+      "L 142,152 " +
+      // bone bridge (pinched waist) — path folds to thicken solid join
+      "C 152,144 164,140 176,144 " +
+      "C 188,148 198,158 200,170 " +
+      "C 202,182 196,192 186,198 " +
+      "C 176,204 162,202 154,194 " +
+      "C 146,186 144,174 150,164 " +
+      "C 156,154 170,148 186,150 " +
+      "C 202,152 218,160 234,168 " +
+      // into S and finish
+      "C 250,176 268,186 280,204 " +
+      "C 292,222 288,248 260,260 " +
+      "C 232,272 196,266 172,250 " +
+      "C 148,234 136,210 140,186 " +
+      "C 144,162 168,148 196,142 " +
+      "C 224,136 250,128 262,108 " +
+      "C 274,88 266,62 240,50 " +
+      "C 214,38 180,42 160,64 " +
+      "C 140,86 138,110 150,128",
   };
 
-  // Uniform edge language — locked for the whole scrub range
-  const NB = 72;
-  const RADIUS = 12.5;
-  const BLUR = 6.5;
-  const CM_MUL = 34;
-  const CM_BIAS = -17;
+  // Uniform sharp contour — locked across whole scrub (harder threshold = razor edge)
+  const NB = 96;
+  const RADIUS = 12.2;
+  const BLUR = 6.0;
+  const CM_MUL = 42;
+  const CM_BIAS = -20;
   const BLEND_EASE = 0.08;
   const Y_EASE = 0.1;
 
@@ -102,7 +115,6 @@
       circlesLayer.appendChild(c);
       circleEls.push(c);
     }
-    // Lock filter once — never retune mid / end
     if (gooBlur) gooBlur.setAttribute("stdDeviation", String(BLUR));
     if (gooMatrix) {
       gooMatrix.setAttribute(
@@ -128,6 +140,18 @@
     cachedPts = [0, 1, 2].map(samplePath);
   }
 
+  function radiusAt(shapeIndex, i) {
+    // Mid MS: slight pinch on bridge bead band (indices ~0.38–0.55 of path)
+    if (shapeIndex !== 1) return RADIUS;
+    const u = NB === 1 ? 0 : i / (NB - 1);
+    if (u > 0.36 && u < 0.58) {
+      const local = (u - 0.36) / 0.22;
+      const pinch = Math.sin(local * Math.PI); // 0 at ends of band, 1 at center
+      return RADIUS - 2.8 * pinch;
+    }
+    return RADIUS;
+  }
+
   function pointsAtBlend(b, yBias) {
     const clamped = Math.max(0, Math.min(2, b));
     const i0 = Math.floor(clamped);
@@ -142,9 +166,12 @@
       const mid = Math.sin(u * Math.PI);
       const yOff = bias * 12 * mid;
       const xOff = bias * 3.5 * Math.sin(u * Math.PI * 2) * mid;
+      const r0 = radiusAt(i0, i);
+      const r1 = radiusAt(i1, i);
       out.push({
         x: a[i].x + (c[i].x - a[i].x) * t + xOff,
         y: a[i].y + (c[i].y - a[i].y) * t + yOff,
+        r: r0 + (r1 - r0) * t,
       });
     }
     return out;
@@ -154,7 +181,7 @@
     for (let i = 0; i < NB; i++) {
       circleEls[i].setAttribute("cx", String(pts[i].x));
       circleEls[i].setAttribute("cy", String(pts[i].y));
-      circleEls[i].setAttribute("r", String(RADIUS));
+      circleEls[i].setAttribute("r", String(pts[i].r));
       circleEls[i].setAttribute("fill-opacity", "1");
     }
   }
