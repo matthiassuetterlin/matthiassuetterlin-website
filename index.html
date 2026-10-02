@@ -36,7 +36,7 @@
           <svg class="ms-gooey" id="ms-gooey" viewBox="0 0 320 260" role="img" aria-hidden="true">
             <defs>
               <filter id="ms-goo" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur" />
+                <feGaussianBlur id="ms-goo-blur" in="SourceGraphic" stdDeviation="12" result="blur" />
                 <feColorMatrix in="blur" mode="matrix"
                   values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 23 -13"
                   result="goo" />
@@ -60,7 +60,7 @@
           <span class="sep">und</span>
           <button type="button" class="text-link" data-go="contact">Raumdesign</button>
         </p>
-        <p class="home-hint">Tippen öffnet die Bereiche</p>
+        <p class="home-hint">Maus 2D · Tippen öffnet die Bereiche</p>
       </div>
     </section>
 
