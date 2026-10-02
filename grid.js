@@ -10,9 +10,11 @@
    * The lines themselves are invisible: only their crossings are drawn, as
    * tiny squares that ride both lines. As soon as one moves it grows and
    * its corners round into a squircle (superellipse |x|^n + |y|^n = 1,
-   * n from ~30 down to 4); moving dots sit under a goo filter like the MS,
-   * so when they come close they melt into each other. Settling, they
-   * shrink and sharpen back into tiny squares.
+   * n from ~30 down to 4) — and fades: the bigger it gets, the lighter its
+   * grey, up to white, so right at the pointer it disappears and shows up
+   * again as it swings out and shrinks. Moving dots sit under a goo filter
+   * like the MS, so when they come close they melt into each other.
+   * Settling, they shrink and sharpen back into tiny grey squares.
    *
    * Text hangs on the grid: main text (titles, project names, tagline)
    * stands above a grid line with a clear gap, its sub text hangs below the
@@ -264,7 +266,9 @@
     gooBlur.setAttribute("stdDeviation", (dotMax * 0.45).toFixed(2));
     const cm = document.createElementNS(NS, "feColorMatrix");
     cm.setAttribute("type", "matrix");
-    cm.setAttribute("values", "0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 24 -9");
+    // Keep each dot's own grey (it fades to white as it grows); only the
+    // alpha is thresholded
+    cm.setAttribute("values", "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -9");
     f.append(gooBlur, cm);
     defs.appendChild(f);
     crisp = document.createElementNS(NS, "g");
@@ -285,7 +289,7 @@
       for (const v of vLines) {
         const el = document.createElementNS(NS, "path");
         crisp.appendChild(el);
-        const d = { h, v, el, round: 0, x: NaN, y: NaN, n: NaN, a: NaN, inGoo: false };
+        const d = { h, v, el, round: 0, x: NaN, y: NaN, n: NaN, a: NaN, inGoo: false, grey: -1 };
         drawDot(d, v.pos, h.pos, 0);
         dots.push(d);
       }
@@ -302,6 +306,7 @@
   // Square (round = 0) to squircle (round = 1): superellipse with
   // exponent n, drawn as a closed polygon fine enough for a few pixels
   const SEG = 32;
+  const REST_GREY = 150; // ≈ 40 % black on white
   const COS = [];
   const SIN = [];
   for (let k = 0; k < SEG; k++) {
@@ -316,6 +321,13 @@
     d.y = y;
     d.n = n;
     d.a = a;
+    // Bigger → lighter: grey at rest, white (invisible) at full size
+    const grow = (a - dotHalf) / (dotMax - dotHalf);
+    const grey = Math.round(REST_GREY + (255 - REST_GREY) * Math.pow(grow, 0.8));
+    if (grey !== d.grey) {
+      d.el.setAttribute("fill", `rgb(${grey},${grey},${grey})`);
+      d.grey = grey;
+    }
     // Big enough to survive the goo threshold → melt with neighbours
     const goo = a > dotHalf * 3;
     if (goo !== d.inGoo) {

@@ -116,11 +116,10 @@ a {
   pointer-events: none;
   overflow: visible;
 }
-/* Grid crossings: tiny squares that grow into melting squircles in motion.
-   Solid fill + group opacity, so the goo filter sees full alpha. */
-.bg-grid .dots { opacity: 0.4; }
+/* Grid crossings: tiny grey squares that grow into melting squircles in
+   motion and fade towards white as they grow (fill set per dot in grid.js,
+   always opaque so the goo filter sees full alpha). */
 .bg-grid path {
-  fill: #000;
   stroke: none;
 }
 
