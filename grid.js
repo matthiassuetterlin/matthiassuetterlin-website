@@ -30,16 +30,16 @@
   // Tunable parameters (adjusted live by the settings menu, tune.js)
   const T = (window.gridTune = Object.assign(
     {
-      spacing: 0.2, // grid step, × MS font size (rebuilds the layout)
-      restSize: 2, // dot size at rest, px
-      maxSize: 0.75, // dot size in full motion, × grid step
-      catchR: 1.1, // pointer catches dots within this many grid steps
-      leash: 4.4, // caught dots let go beyond this many grid steps
-      pullNear: 0.25, // share of the way the nearest dots follow the pointer
-      pullFar: 0.5, // … and the farthest caught ones
-      follow: 0.2, // spring stiffness while caught
-      spring: 0.025, // spring stiffness on the way home
-      wobble: 0.5, // damping on the way home (higher = more overshoot)
+      spacing: 0.16, // grid step, × MS font size (rebuilds the layout)
+      restSize: 1, // dot size at rest, px
+      maxSize: 0.8, // dot size in full motion, × grid step
+      catchR: 2, // pointer catches dots within this many grid steps
+      leash: 2.5, // caught dots let go beyond this many grid steps
+      pullNear: 1, // share of the way the nearest dots follow the pointer
+      pullFar: 1, // … and the farthest caught ones
+      follow: 0.3, // spring stiffness while caught
+      spring: 0.01, // spring stiffness on the way home
+      wobble: 0.74, // damping on the way home (higher = more overshoot)
       roundness: 12, // superellipse exponent in full motion (2 = circle)
       restColor: "#ffffff",
       peakColor: "#ffffff",
@@ -47,10 +47,10 @@
       peakAt: 0.05, // share of the full size where the dot is darkest
       goo: 1, // blur that melts dots together, × max size
       outline: true,
-      outlineColor: "#2b2b2b",
+      outlineColor: "#595959",
       outlineWidth: 0.3, // px-ish
       outlineFrom: 0, // fill lightness from which the outline appears
-      textFollow: 0.45, // how much the text follows the dots' vertical shift
+      textFollow: 0.1, // how much the text follows the dots' vertical shift
     },
     window.gridTune || {}
   ));
