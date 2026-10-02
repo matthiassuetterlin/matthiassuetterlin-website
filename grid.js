@@ -27,6 +27,43 @@
   const NS = "http://www.w3.org/2000/svg";
   const root = document.documentElement;
 
+  // Tunable parameters (adjusted live by the settings menu, tune.js)
+  const T = (window.gridTune = Object.assign(
+    {
+      spacing: 0.2, // grid step, × MS font size (rebuilds the layout)
+      restSize: 2, // dot size at rest, px
+      maxSize: 0.32, // dot size in full motion, × grid step
+      catchR: 1.5, // pointer catches dots within this many grid steps
+      leash: 2.4, // caught dots let go beyond this many grid steps
+      pullNear: 0.9, // share of the way the nearest dots follow the pointer
+      pullFar: 0.3, // … and the farthest caught ones
+      follow: 0.2, // spring stiffness while caught
+      spring: 0.07, // spring stiffness on the way home
+      wobble: 0.86, // damping on the way home (higher = more overshoot)
+      roundness: 4, // superellipse exponent in full motion (2 = circle)
+      restColor: "#969696",
+      peakColor: "#737373",
+      fadeColor: "#ffffff",
+      peakAt: 0.35, // share of the full size where the dot is darkest
+      goo: 0.45, // blur that melts dots together, × max size
+      outline: true,
+      outlineColor: "#737373",
+      outlineWidth: 1, // px-ish
+      outlineFrom: 0.6, // fill lightness from which the outline appears
+      textFollow: 0.6, // how much the text follows the dots' vertical shift
+    },
+    window.gridTune || {}
+  ));
+  const hexCache = {};
+  function rgb(hex) {
+    let c = hexCache[hex];
+    if (!c) {
+      const n = parseInt(String(hex).replace("#", ""), 16) || 0;
+      c = hexCache[hex] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    return c;
+  }
+
   // Main text stands above a line, sub text hangs below it
   const MAIN = ".panel h2, .project-name, .tagline";
   const SUB = ".panel p, .facts li, .local-nav, .project-meta, .home-hint";
@@ -41,7 +78,6 @@
   let dotMax = 11; // half size in full motion
   let crisp = null;
   let gooG = null;
-  let gooBlur = null;
   let gooFilter = null;
   let letters = [];
   let W = 0;
@@ -51,9 +87,6 @@
   let gap = 14;
   let ox = 0;
   let oy = 0;
-  let rCatch = 77; // pointer catches dots whose home is this close
-  let rGrow = 112; // dots grow within this distance of the pointer
-  let rBreak = 140; // caught dots let go beyond this pointer–home distance
   let raf = null;
   let lettersMoved = false;
   // Pointer in client coordinates (page = client + scroll, so dots also
@@ -237,12 +270,9 @@
   function build() {
     const fontPx = letterM ? parseFloat(getComputedStyle(letterM).fontSize) : 0;
     // M stem ≈ 0.165 em; the grid runs a little wider
-    spacing = Math.max(36, Math.round((fontPx || 350) * 0.2));
+    spacing = Math.max(36, Math.round((fontPx || 350) * T.spacing));
     unit = spacing / Math.max(1, Math.round(spacing / 30));
     gap = Math.max(9, Math.round(spacing * 0.2));
-    rCatch = spacing * 1.5;
-    rGrow = spacing * 1.7;
-    rBreak = spacing * 2.4;
     root.style.setProperty("--grid", `${spacing}px`);
     root.style.setProperty("--lh", `${unit}px`);
     W = root.clientWidth;
@@ -259,54 +289,15 @@
     svg.style.height = `${D}px`;
     svg.textContent = "";
     dots = [];
-    dotHalf = Math.max(1, spacing * 0.014); // ≥ 2 px, also on phones
-    dotMax = Math.max(5, spacing * 0.16);
-    // Resting dots stay crisp; moving ones go into the goo group
+    sizes();
     const defs = document.createElementNS(NS, "defs");
-    const f = document.createElementNS(NS, "filter");
-    f.id = "dot-goo";
-    // Region is set per frame to the moving dots' bounds (see moveDots)
-    f.setAttribute("filterUnits", "userSpaceOnUse");
-    gooFilter = f;
-    f.setAttribute("color-interpolation-filters", "sRGB");
-    gooBlur = document.createElementNS(NS, "feGaussianBlur");
-    gooBlur.setAttribute("in", "SourceGraphic");
-    gooBlur.setAttribute("result", "blur");
-    gooBlur.setAttribute("stdDeviation", (dotMax * 0.45).toFixed(2));
-    const cm = document.createElementNS(NS, "feColorMatrix");
-    cm.setAttribute("type", "matrix");
-    // Keep each dot's own grey (it fades to white as it grows); only the
-    // alpha is thresholded
-    cm.setAttribute("values", "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -9");
-    cm.setAttribute("result", "goo");
-    // Hairline outline along the melted contour: the band between the goo
-    // edge and a slightly higher threshold of the same blur (cheap — no
-    // morphology). Its strength follows how light the fill is, so it
-    // appears as a dot grows and whitens; at the pointer only it remains.
-    const prim = (tag, attrs) => {
-      const el = document.createElementNS(NS, tag);
-      for (const k in attrs) el.setAttribute(k, attrs[k]);
-      return el;
-    };
-    const inner = prim("feColorMatrix", {
-      in: "blur",
-      type: "matrix",
-      values: "0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 40 -16.4",
-      result: "inner",
-    });
-    // Light fill → opaque outline (alpha from the red channel, from ~60 % up)
-    const tint = prim("feColorMatrix", {
-      in: "goo",
-      type: "matrix",
-      values: `0 0 0 0 ${OUTLINE}  0 0 0 0 ${OUTLINE}  0 0 0 0 ${OUTLINE}  2.6 0 0 0 -1.55`,
-      result: "tint",
-    });
-    // Light parts of the shape, minus its inside → only the edge band stays
-    const line = prim("feComposite", { in: "tint", in2: "inner", operator: "out", result: "line" });
-    const merge = prim("feMerge", {});
-    merge.append(prim("feMergeNode", { in: "goo" }), prim("feMergeNode", { in: "line" }));
-    f.append(gooBlur, cm, inner, tint, line, merge);
-    defs.appendChild(f);
+    gooFilter = document.createElementNS(NS, "filter");
+    gooFilter.id = "dot-goo";
+    // Region is set per frame to the grown dots' bounds (see step)
+    gooFilter.setAttribute("filterUnits", "userSpaceOnUse");
+    gooFilter.setAttribute("color-interpolation-filters", "sRGB");
+    defs.appendChild(gooFilter);
+    setFilter();
     crisp = document.createElementNS(NS, "g");
     crisp.setAttribute("class", "dots");
     gooG = document.createElementNS(NS, "g");
@@ -334,13 +325,56 @@
     measureLetters();
   }
 
+  function sizes() {
+    dotHalf = Math.max(0.5, T.restSize / 2);
+    dotMax = Math.max(dotHalf * 3.5, (spacing * T.maxSize) / 2);
+  }
+
+  // Goo filter: melt grown dots; optional hairline outline along the
+  // melted contour (the band between the goo edge and a slightly higher
+  // threshold of the same blur — cheap, no morphology), tinted and faded
+  // in by how light the fill is, so at the pointer only it remains.
+  function setFilter() {
+    const f = gooFilter;
+    if (!f) return;
+    f.textContent = "";
+    const prim = (tag, attrs) => {
+      const el = document.createElementNS(NS, tag);
+      for (const k in attrs) el.setAttribute(k, attrs[k]);
+      f.appendChild(el);
+      return el;
+    };
+    prim("feGaussianBlur", { in: "SourceGraphic", stdDeviation: (dotMax * T.goo).toFixed(2), result: "blur" });
+    // Keep each dot's own colour; only the alpha is thresholded
+    prim("feColorMatrix", { in: "blur", type: "matrix", values: "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -9", result: "goo" });
+    if (!T.outline) return;
+    const edge = 0.3958 + 0.0135 * T.outlineWidth; // inner threshold (alpha)
+    prim("feColorMatrix", {
+      in: "blur",
+      type: "matrix",
+      values: `0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 40 ${(-(40 * edge - 0.5)).toFixed(2)}`,
+      result: "inner",
+    });
+    const [r, g, b] = rgb(T.outlineColor).map((v) => (v / 255).toFixed(3));
+    const k = 1 / Math.max(0.05, 1 - T.outlineFrom);
+    prim("feColorMatrix", {
+      in: "goo",
+      type: "matrix",
+      values: `0 0 0 0 ${r}  0 0 0 0 ${g}  0 0 0 0 ${b}  ${k.toFixed(2)} 0 0 0 ${(-k * T.outlineFrom).toFixed(2)}`,
+      result: "tint",
+    });
+    prim("feComposite", { in: "tint", in2: "inner", operator: "out", result: "line" });
+    const merge = prim("feMerge", {});
+    for (const n of ["goo", "line"]) {
+      const node = document.createElementNS(NS, "feMergeNode");
+      node.setAttribute("in", n);
+      merge.appendChild(node);
+    }
+  }
+
   // Square (round = 0) to squircle (round = 1): superellipse with
   // exponent n, drawn as a closed polygon fine enough for a few pixels
   const SEG = 32;
-  const REST_GREY = 150; // ≈ 40 % black on white
-  const PEAK_GREY = 115; // ≈ 55 % — most visible while swinging out
-  const PEAK_AT = 0.35; // share of the full size where it is darkest
-  const OUTLINE = 0.45; // outline grey (0 black … 1 white) of grown dots
   const COS = [];
   const SIN = [];
   for (let k = 0; k < SEG; k++) {
@@ -348,27 +382,34 @@
     SIN.push(Math.sin((k / SEG) * Math.PI * 2));
   }
   function drawDot(d, x, y, round) {
-    const n = 30 - 26 * Math.pow(round, 0.7);
+    const n = 30 - (30 - T.roundness) * Math.pow(round, 0.7);
     const a = dotHalf + (dotMax - dotHalf) * Math.pow(round, 1.2);
     if (Math.abs(x - d.x) < 0.05 && Math.abs(y - d.y) < 0.05 && Math.abs(n - d.n) < 0.2 && Math.abs(a - d.a) < 0.05) return;
     d.x = x;
     d.y = y;
     d.n = n;
     d.a = a;
-    // Visibility arc: rest grey → darkest at mid size → white at full size
+    // Colour arc: rest colour → peak colour at mid size → fade colour (white
+    // by default, i.e. invisible) at full size
     const grow = (a - dotHalf) / (dotMax - dotHalf);
-    let grey;
-    if (grow <= PEAK_AT) {
-      const t = grow / PEAK_AT;
-      grey = REST_GREY + (PEAK_GREY - REST_GREY) * t * t * (3 - 2 * t);
+    const pk = Math.min(0.95, Math.max(0.05, T.peakAt));
+    let from;
+    let to;
+    let t;
+    if (grow <= pk) {
+      from = rgb(T.restColor);
+      to = rgb(T.peakColor);
+      t = grow / pk;
     } else {
-      const t = (grow - PEAK_AT) / (1 - PEAK_AT);
-      grey = PEAK_GREY + (255 - PEAK_GREY) * t * t * (3 - 2 * t);
+      from = rgb(T.peakColor);
+      to = rgb(T.fadeColor);
+      t = (grow - pk) / (1 - pk);
     }
-    grey = Math.round(grey);
-    if (grey !== d.grey) {
-      d.el.setAttribute("fill", `rgb(${grey},${grey},${grey})`);
-      d.grey = grey;
+    t = t * t * (3 - 2 * t);
+    const fill = `rgb(${Math.round(from[0] + (to[0] - from[0]) * t)},${Math.round(from[1] + (to[1] - from[1]) * t)},${Math.round(from[2] + (to[2] - from[2]) * t)})`;
+    if (fill !== d.grey) {
+      d.el.setAttribute("fill", fill);
+      d.grey = fill;
     }
     // Big enough to survive the goo threshold → melt with neighbours
     const goo = a > dotHalf * 3;
@@ -408,6 +449,9 @@
   }
 
   function step() {
+    const rCatch = spacing * T.catchR;
+    const rBreak = spacing * Math.max(T.leash, T.catchR + 0.1);
+    const rGrow = spacing * (T.catchR + 0.2);
     const C = pointerPage();
     if (C) wakeAround(C, rBreak);
     let snapped = false;
@@ -420,7 +464,7 @@
       if (C && !d.caught && toHome < rCatch) {
         // Caught: nearer dots follow the pointer more closely
         d.caught = true;
-        d.s = 0.3 + 0.6 * Math.pow(1 - toHome / rCatch, 0.7);
+        d.s = T.pullFar + (T.pullNear - T.pullFar) * Math.pow(1 - toHome / rCatch, 0.7);
       } else if (d.caught && toHome > rBreak) {
         d.caught = false; // leash breaks: spring home
         snapped = true;
@@ -428,8 +472,8 @@
       const tx = d.caught ? d.hx + (C.x - d.hx) * d.s : d.hx;
       const ty = d.caught ? d.hy + (C.y - d.hy) * d.s : d.hy;
       // Caught: firm, slightly lagging follow. Free: softer, overshooting
-      const k = d.caught ? 0.2 : 0.07;
-      const damp = d.caught ? 0.72 : 0.86;
+      const k = d.caught ? T.follow : T.spring;
+      const damp = d.caught ? 0.72 : T.wobble;
       d.vx = (d.vx + (tx - d.px) * k) * damp;
       d.vy = (d.vy + (ty - d.py) * k) * damp;
       d.px += d.vx;
@@ -489,7 +533,7 @@
   function moveLetters() {
     for (const L of letters) {
       // Text follows the field a little softer than the dots, to stay readable
-      const dy = calm ? 0 : shiftAt(L.x, L.y) * 0.6;
+      const dy = calm ? 0 : shiftAt(L.x, L.y) * T.textFollow;
       if (Math.abs(dy - L.dy) > 0.05) {
         L.dy = dy;
         L.el.style.transform = dy ? `translateY(${dy.toFixed(2)}px)` : "";
@@ -574,6 +618,19 @@
     },
     { passive: true }
   );
+
+  // --- Settings hooks (tune.js) --------------------------------------------
+
+  // Sizes, colours, outline and goo change in place; spacing needs a rebuild
+  window.gridRefresh = () => {
+    sizes();
+    setFilter();
+    for (const d of dots) {
+      d.a = NaN;
+      drawDot(d, d.px, d.py, d.round);
+    }
+  };
+  window.gridRebuild = () => scheduleBuild(80);
 
   // --- Lifecycle ---------------------------------------------------------
 
