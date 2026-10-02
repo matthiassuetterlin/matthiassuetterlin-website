@@ -40,6 +40,7 @@
   let raf = null;
   let moved = false;
   const ptr = { x: NaN, y: NaN };
+  const calm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function lerp(a, b, t) {
     return a + (b - a) * t;
@@ -305,7 +306,7 @@
     if (!raf) raf = requestAnimationFrame(tick);
   }
 
-  function onMove(x, y) {
+  function onMove(x, y, snap) {
     const px = ptr.x;
     const py = ptr.y;
     ptr.x = x;
@@ -322,8 +323,10 @@
         if (!l.grabbed) continue;
         const pull = c - l.pos;
         l.at = Math.min(1, Math.max(0, l.vertical ? y / D : x / W));
-        if (Math.abs(pull) > snapDist) {
+        if (Math.abs(pull) > snap) {
           release(l);
+          // A short tick under the finger when a line snaps free (Android)
+          if (snap > snapDist && navigator.vibrate) navigator.vibrate(6);
           continue;
         }
         l.progress = pull * 2;
@@ -333,7 +336,51 @@
     }
   }
 
-  window.addEventListener("pointermove", (e) => onMove(e.pageX, e.pageY), { passive: true });
+  // Fingers are less precise than a mouse: give them more travel
+  window.addEventListener(
+    "pointermove",
+    (e) => onMove(e.pageX, e.pageY, e.pointerType === "mouse" ? snapDist : snapDist * 1.7),
+    { passive: true }
+  );
+
+  // Pluck one line, as if flicked at x: it swings out from `amp`
+  function flick(l, x, amp) {
+    if (!l || l.grabbed) return;
+    const cur = l.swinging ? l.progress * Math.sin(l.time) : 0;
+    if (Math.abs(amp) < Math.abs(cur) + 1) return;
+    l.at = Math.min(1, Math.max(0, x / W));
+    l.progress = amp;
+    l.time = Math.PI / 2;
+    l.swinging = true;
+    kick();
+  }
+
+  // Tap on empty space (touch): pluck the nearest horizontal line there
+  let down = null;
+  window.addEventListener(
+    "pointerdown",
+    (e) => {
+      down = e.pointerType === "mouse" ? null : { x: e.pageX, y: e.pageY, t: performance.now() };
+    },
+    { passive: true }
+  );
+  window.addEventListener(
+    "pointerup",
+    (e) => {
+      if (!down || e.target.closest("button, a")) return;
+      const moved = Math.hypot(e.pageX - down.x, e.pageY - down.y);
+      if (moved < 10 && performance.now() - down.t < 350) {
+        const l = hLines[Math.round((e.pageY - oy) / spacing)];
+        if (l) {
+          let pull = e.pageY - l.pos;
+          if (Math.abs(pull) < spacing * 0.25) pull = spacing * 0.5 * (pull < 0 ? -1 : 1);
+          flick(l, e.pageX, pull * 2.4);
+        }
+      }
+      down = null;
+    },
+    { passive: true }
+  );
   const releaseAll = () => {
     ptr.x = NaN;
     ptr.y = NaN;
@@ -348,11 +395,33 @@
     },
     { passive: true }
   );
-  // Scrolling moves the page under a still pointer — don't treat it as a pluck
-  window.addEventListener("scroll", () => {
-    ptr.x = NaN;
-    ptr.y = NaN;
-  }, { passive: true });
+  // Scrolling: the net lags behind like rubber — visible horizontal lines
+  // swing with the scroll speed, and the text rides along. (A still pointer
+  // over moving lines is not treated as crossing them.)
+  let lastY = window.scrollY;
+  let lastT = performance.now();
+  window.addEventListener(
+    "scroll",
+    () => {
+      ptr.x = NaN;
+      ptr.y = NaN;
+      const now = performance.now();
+      const v = ((window.scrollY - lastY) / Math.max(8, now - lastT)) * 16; // px per frame
+      lastY = window.scrollY;
+      lastT = now;
+      if (calm || Math.abs(v) < 1.5) return;
+      const top = window.scrollY - spacing;
+      const bottom = window.scrollY + window.innerHeight + spacing;
+      const cap = spacing * 1.2;
+      for (const l of hLines) {
+        if (l.pos < top || l.pos > bottom) continue;
+        const vary = 0.75 + 0.25 * Math.sin(l.pos * 0.05);
+        const amp = Math.max(-cap, Math.min(cap, v * 1.6)) * vary;
+        flick(l, W * (0.5 + 0.3 * Math.sin(l.pos * 0.013)), amp);
+      }
+    },
+    { passive: true }
+  );
 
   // --- Lifecycle ---------------------------------------------------------
 

@@ -82,9 +82,12 @@ a {
 #hud {
   position: fixed;
   z-index: 50;
-  top: 1rem;
-  left: 1.25rem;
-  right: 1.25rem;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem 1.25rem 1.75rem;
+  /* Text scrolling underneath fades out instead of colliding */
+  background: linear-gradient(var(--bg) 60%, rgba(255, 255, 255, 0));
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -118,6 +121,10 @@ a {
   stroke: rgba(0, 0, 0, 0.14);
   stroke-width: 1;
 }
+/* Dense phone grid on sharp screens: finer lines */
+@media (max-width: 640px) and (min-resolution: 2dppx) {
+  .bg-grid path { stroke-width: 0.6; }
+}
 
 #stage {
   position: relative;
@@ -138,6 +145,12 @@ a {
   justify-content: center;
   animation: enter 0.45s var(--ease);
 }
+/* Touch: on the start page a finger drives the goo and the grid (nothing
+   to scroll there); on content pages vertical swipes scroll, sideways
+   swipes pluck. */
+.view-home { touch-action: pinch-zoom; }
+.view:not(.view-home) { touch-action: pan-y pinch-zoom; }
+
 .view-home.is-active {
   position: relative;
   justify-content: center;
