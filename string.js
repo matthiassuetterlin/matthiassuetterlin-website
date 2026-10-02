@@ -5,6 +5,7 @@
    * A thin line drawn as a quadratic Bézier. Moving the pointer across it
    * bends it at the pointer position with the vertical movement; leaving
    * lets it swing out like a plucked string. Works with mouse and touch.
+   * The line always spans the full page width, wherever it sits.
    */
   const MAX_BEND = 120;
 
@@ -28,8 +29,19 @@
     let reqId = null;
     let lastY = null;
 
+    let w = 0;
+
+    // Stretch line and hit area from the left to the right page edge
+    function fit() {
+      const left = host.getBoundingClientRect().left;
+      w = document.documentElement.clientWidth;
+      for (const n of [svg, hit]) {
+        n.style.left = `${-left}px`;
+        n.style.width = `${w}px`;
+      }
+    }
+
     function setPath(p) {
-      const w = host.clientWidth;
       path.setAttribute("d", `M0 250 Q${(w * x).toFixed(1)} ${(250 + p).toFixed(1)}, ${w} 250`);
     }
 
@@ -61,8 +73,7 @@
       lastY = e.clientY;
     });
     hit.addEventListener("pointermove", (e) => {
-      const r = host.getBoundingClientRect();
-      x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      x = Math.min(1, Math.max(0, e.clientX / w));
       const dy = lastY === null ? 0 : e.clientY - lastY;
       lastY = e.clientY;
       progress = Math.max(-MAX_BEND, Math.min(MAX_BEND, progress + dy));
@@ -78,8 +89,13 @@
       if (e.pointerType !== "mouse") release();
     });
 
-    new ResizeObserver(() => setPath(reqId ? progress : 0)).observe(host);
-    setPath(0);
+    const refit = () => {
+      fit();
+      setPath(reqId ? progress : 0);
+    };
+    new ResizeObserver(refit).observe(host);
+    window.addEventListener("resize", refit, { passive: true });
+    refit();
   }
 
   // One under every content heading, plus any placed by hand

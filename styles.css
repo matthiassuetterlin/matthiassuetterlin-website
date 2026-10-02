@@ -14,6 +14,7 @@ html, body {
   color: var(--ink);
   font-family: Helvetica, "Helvetica Neue", Arial, sans-serif;
 }
+body { overflow-x: clip; } /* full-width lines never cause sideways scroll */
 
 button {
   font: inherit;
@@ -218,7 +219,7 @@ a {
   position: absolute;
   left: 0;
   top: -250px;
-  width: 100%;
+  width: 100vw;
   height: 500px;
   overflow: visible;
   pointer-events: none;
@@ -231,7 +232,7 @@ a {
 .string-hit {
   position: absolute;
   left: 0;
-  right: 0;
+  width: 100vw;
   top: -20px;
   height: 40px;
   z-index: 1;
