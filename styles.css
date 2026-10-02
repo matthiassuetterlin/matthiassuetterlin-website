@@ -116,14 +116,10 @@ a {
   pointer-events: none;
   overflow: visible;
 }
+/* Grid crossings: small squares that round into squircles as they move */
 .bg-grid path {
-  fill: none;
-  stroke: rgba(0, 0, 0, 0.14);
-  stroke-width: 1;
-}
-/* Dense phone grid on sharp screens: finer lines */
-@media (max-width: 640px) and (min-resolution: 2dppx) {
-  .bg-grid path { stroke-width: 0.6; }
+  fill: rgba(0, 0, 0, 0.32);
+  stroke: none;
 }
 
 #stage {

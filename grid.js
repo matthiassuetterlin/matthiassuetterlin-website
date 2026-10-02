@@ -7,6 +7,12 @@
    * content. Crossing a line grabs it; it follows the pointer until it
    * snaps free and swings out like a plucked string.
    *
+   * The lines themselves are invisible: only their crossings are drawn, as
+   * small squares that ride both lines. A square at rest is crisp; as soon
+   * as it moves its corners round into a squircle (superellipse
+   * |x|^n + |y|^n = 1, n from ~30 down to 4) and it sharpens again when
+   * it settles.
+   *
    * Text hangs on the grid: main text (titles, project names, tagline)
    * stands above a grid line with a clear gap, its sub text hangs below the
    * same line with the same gap. Finer text uses a line height that divides
@@ -27,6 +33,8 @@
   const SPLIT = ".panel, .tagline, .home-hint";
 
   let hLines = [];
+  let dots = [];
+  let dotHalf = 3;
   let vLines = [];
   let letters = [];
   let W = 0;
@@ -237,30 +245,81 @@
     svg.style.width = `${W}px`;
     svg.style.height = `${D}px`;
     svg.textContent = "";
+    dots = [];
+    dotHalf = Math.max(2, Math.round(spacing * 0.055));
     hLines = [];
     vLines = [];
     const add = (list, vertical, pos) => {
-      const path = document.createElementNS(NS, "path");
-      svg.appendChild(path);
-      const l = { vertical, pos, path, progress: 0, cur: 0, at: 0.5, time: 0, grabbed: false, swinging: false };
-      draw(l, 0);
-      list.push(l);
+      list.push({ vertical, pos, progress: 0, cur: 0, at: 0.5, time: 0, grabbed: false, swinging: false });
     };
     for (let y = oy; y <= D; y += spacing) add(hLines, false, y);
     for (let x = ox; x <= W; x += spacing) add(vLines, true, x);
+    // One square per crossing
+    for (const h of hLines) {
+      for (const v of vLines) {
+        const el = document.createElementNS(NS, "path");
+        svg.appendChild(el);
+        const d = { h, v, el, round: 0, x: NaN, y: NaN, n: NaN };
+        drawDot(d, v.pos, h.pos, 0);
+        dots.push(d);
+      }
+    }
 
     measureLetters();
   }
 
+  // The lines only carry state; the crossings are what gets drawn
   function draw(l, p) {
     l.cur = p;
-    if (l.vertical) {
-      const y = (D * l.at).toFixed(1);
-      l.path.setAttribute("d", `M${l.pos} 0 Q${(l.pos + p).toFixed(1)} ${y}, ${l.pos} ${D}`);
-    } else {
-      const x = (W * l.at).toFixed(1);
-      l.path.setAttribute("d", `M0 ${l.pos} Q${x} ${(l.pos + p).toFixed(1)}, ${W} ${l.pos}`);
+  }
+
+  // Square (round = 0) to squircle (round = 1): superellipse with
+  // exponent n, drawn as a closed polygon fine enough for a few pixels
+  const SEG = 32;
+  const COS = [];
+  const SIN = [];
+  for (let k = 0; k < SEG; k++) {
+    COS.push(Math.cos((k / SEG) * Math.PI * 2));
+    SIN.push(Math.sin((k / SEG) * Math.PI * 2));
+  }
+  function drawDot(d, x, y, round) {
+    const n = 30 - 26 * Math.pow(round, 0.7);
+    if (Math.abs(x - d.x) < 0.05 && Math.abs(y - d.y) < 0.05 && Math.abs(n - d.n) < 0.2) return;
+    d.x = x;
+    d.y = y;
+    d.n = n;
+    const a = dotHalf;
+    if (n > 29) {
+      d.el.setAttribute("d", `M${(x - a).toFixed(2)} ${(y - a).toFixed(2)}h${2 * a}v${2 * a}h${-2 * a}z`);
+      return;
     }
+    const e = 2 / n;
+    let path = "";
+    for (let k = 0; k < SEG; k++) {
+      const c = COS[k];
+      const s = SIN[k];
+      const px = x + a * Math.sign(c) * Math.pow(Math.abs(c), e);
+      const py = y + a * Math.sign(s) * Math.pow(Math.abs(s), e);
+      path += `${k ? "L" : "M"}${px.toFixed(2)} ${py.toFixed(2)}`;
+    }
+    d.el.setAttribute("d", path + "z");
+  }
+
+  // Move every crossing with its two lines; round it while it moves
+  function moveDots() {
+    let settling = false;
+    const full = spacing * 0.2;
+    for (const d of dots) {
+      const dx = offsetAt(d.v, d.h.pos);
+      const dy = offsetAt(d.h, d.v.pos);
+      const target = Math.min(1, (Math.abs(dx) + Math.abs(dy)) / full);
+      // Round up quickly, sharpen back slowly
+      d.round += (target - d.round) * (target > d.round ? 0.35 : 0.08);
+      if (d.round < 0.01) d.round = 0;
+      else settling = true;
+      drawDot(d, d.v.pos + dx, d.h.pos + dy, d.round);
+    }
+    return settling;
   }
 
   // Offset of a line at position s along it (x for horizontal, y for vertical)
@@ -324,6 +383,7 @@
     }
     if (busy || moved) {
       moveLetters();
+      if (moveDots()) busy = true;
       moved = busy;
     }
     if (busy) kick();
