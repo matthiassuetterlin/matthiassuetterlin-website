@@ -108,6 +108,8 @@
   const aim = { x: NaN, y: NaN };
   const close = { x: 0, v: 0 };
   const sep = { x: 0, v: 0 };
+  const swayX = { x: 0, v: 0 };
+  const swayY = { x: 0, v: 0 };
 
   function readRects() {
     letterM.style.transform = "";
@@ -195,9 +197,20 @@
     const W = G.W;
     const time = (now - t0) / 1000;
 
-    // Pointer, or a slow idle orbit that drifts in and out of the centre
-    const tx = mouse.active ? mouse.x : G.midX + Math.cos(time * 0.33) * G.Rx * 0.75;
-    const ty = mouse.active ? mouse.y : G.midY + Math.sin(time * 0.47) * G.Ry * 0.45;
+    // Pointer, or a slow idle orbit that drifts in and out of the centre;
+    // on a phone the tilt (tilt.js) pushes that orbit around
+    const mo = window.motion;
+    const tiltK = mo && mo.active && window.tiltTune ? window.tiltTune.ms : 0;
+    let tx = mouse.active ? mouse.x : G.midX + Math.cos(time * 0.33) * G.Rx * 0.75;
+    let ty = mouse.active ? mouse.y : G.midY + Math.sin(time * 0.47) * G.Ry * 0.45;
+    if (!mouse.active && tiltK > 0) {
+      tx += mo.x * G.Rx * 0.9 * tiltK;
+      ty += mo.y * G.Ry * 0.9 * tiltK;
+    }
+    // The letters themselves sway with the tilt and lag behind quick moves
+    const shake = (window.tiltTune && window.tiltTune.shake) || 0;
+    spring(swayX, tiltK ? mo.x * W * 0.08 * tiltK - mo.ax * W * 0.012 * shake : 0, 0.08, 0.82);
+    spring(swayY, tiltK ? mo.y * H * 0.08 * tiltK - mo.ay * H * 0.012 * shake : 0, 0.08, 0.82);
     aim.x = lerp(aim.x, tx, 0.14);
     aim.y = lerp(aim.y, ty, 0.14);
 
@@ -226,10 +239,10 @@
 
     // Both bodies lean toward the pointer, strongest when close
     const leanK = T.lean * cc;
-    const offMx = -sep.x + clamp((aim.x - G.m.x) * leanK, -W * 0.12, W * 0.12);
-    const offMy = clamp((aim.y - G.m.y) * leanK, -H * 0.1, H * 0.1);
-    const offSx = sep.x + clamp((aim.x - G.s.x) * leanK, -W * 0.12, W * 0.12);
-    const offSy = clamp((aim.y - G.s.y) * leanK, -H * 0.1, H * 0.1);
+    const offMx = -sep.x + clamp((aim.x - G.m.x) * leanK, -W * 0.12, W * 0.12) + swayX.x;
+    const offMy = clamp((aim.y - G.m.y) * leanK, -H * 0.1, H * 0.1) + swayY.x;
+    const offSx = sep.x + clamp((aim.x - G.s.x) * leanK, -W * 0.12, W * 0.12) + swayX.x;
+    const offSy = clamp((aim.y - G.s.y) * leanK, -H * 0.1, H * 0.1) + swayY.x;
     // Stretch toward each other as they merge
     const sx = 1 + T.stretch * cc;
     tM.setAttribute(

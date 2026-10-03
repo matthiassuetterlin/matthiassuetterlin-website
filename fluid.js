@@ -403,24 +403,70 @@ void main() {
   }
 
   // One physics step of 1/60 s
+  // On a phone, while no finger is on the screen, the drop rolls around by
+  // itself: tilt pulls it like gravity, quick moves push it (tilt.js)
+  const roll = { x: NaN, y: NaN, vx: 0, vy: 0 };
+  function rolling() {
+    const mo = window.motion;
+    const TT = window.tiltTune;
+    return !ptr.on && !!mo && mo.active && !!TT && TT.roll;
+  }
+  function stepRoll() {
+    const mo = window.motion;
+    const TT = window.tiltTune;
+    if (isNaN(roll.x)) {
+      roll.x = isNaN(ptr.x) ? W / 2 : ptr.x;
+      roll.y = isNaN(ptr.y) ? H / 2 : ptr.y;
+    }
+    roll.vx = (roll.vx + mo.x * TT.gravity - mo.ax * TT.shake * 0.35) * TT.friction;
+    roll.vy = (roll.vy + mo.y * TT.gravity - mo.ay * TT.shake * 0.35) * TT.friction;
+    roll.x += roll.vx;
+    roll.y += roll.vy;
+    // Bounce softly off the screen edges
+    const m = R * 0.6;
+    if (roll.x < m) [roll.x, roll.vx] = [m, Math.abs(roll.vx) * 0.4];
+    if (roll.x > W - m) [roll.x, roll.vx] = [W - m, -Math.abs(roll.vx) * 0.4];
+    if (roll.y < m) [roll.y, roll.vy] = [m, Math.abs(roll.vy) * 0.4];
+    if (roll.y > H - m) [roll.y, roll.vy] = [H - m, -Math.abs(roll.vy) * 0.4];
+  }
+
   function step() {
-    if (ptr.on) {
-      if (!drops[0] || isNaN(drops[0].x)) for (const d of drops) Object.assign(d, { x: ptr.x, y: ptr.y, vx: 0, vy: 0 });
-      const speed = isNaN(lastX) ? 0 : Math.hypot(ptr.x - lastX, ptr.y - lastY);
-      lastX = ptr.x;
-      lastY = ptr.y;
+    const rolls = rolling();
+    if (rolls) stepRoll();
+    else if (ptr.on) {
+      // The finger takes the drop; letting go hands it back to the tilt
+      roll.vx = isNaN(roll.x) ? 0 : (ptr.x - roll.x) * 0.3;
+      roll.vy = isNaN(roll.y) ? 0 : (ptr.y - roll.y) * 0.3;
+      roll.x = ptr.x;
+      roll.y = ptr.y;
+    }
+    const on = ptr.on || rolls;
+    const px = rolls ? roll.x : ptr.x;
+    const py = rolls ? roll.y : ptr.y;
+    if (on) {
+      if (!drops[0] || isNaN(drops[0].x)) for (const d of drops) Object.assign(d, { x: px, y: py, vx: 0, vy: 0 });
+      const speed = isNaN(lastX) ? 0 : Math.hypot(px - lastX, py - lastY);
+      lastX = px;
+      lastY = py;
       const target = Math.min(1, speed / 22);
       energy = target > energy ? energy + (target - energy) * 0.3 : energy * T.decay;
     } else {
       lastX = NaN;
       energy *= T.decay;
     }
-    presence += ((ptr.on ? 1 : 0) - presence) * (ptr.on ? 0.15 : 0.06);
+    presence += ((on ? 1 : 0) - presence) * (on ? 0.15 : 0.06);
+    // Quick phone moves make the chain slosh
+    const mo = window.motion;
+    const slosh = mo && mo.active && window.tiltTune ? window.tiltTune.shake * 0.25 : 0;
     let moving = 0;
     for (let i = 0; i < drops.length; i++) {
       const d = drops[i];
-      const tx = i ? drops[i - 1].x : ptr.on ? ptr.x : d.x;
-      const ty = i ? drops[i - 1].y : ptr.on ? ptr.y : d.y;
+      const tx = i ? drops[i - 1].x : on ? px : d.x;
+      const ty = i ? drops[i - 1].y : on ? py : d.y;
+      if (slosh) {
+        d.vx -= mo.ax * slosh * (i / drops.length);
+        d.vy -= mo.ay * slosh * (i / drops.length);
+      }
       const k = T.follow * (i ? 1 - 0.25 * (i / drops.length) : 1.4);
       d.vx = (d.vx + (tx - d.x) * Math.min(0.9, k)) * T.wobble;
       d.vy = (d.vy + (ty - d.y) * Math.min(0.9, k)) * T.wobble;
@@ -605,7 +651,7 @@ void main() {
     // Text changes (fades, hovers, scrolling) are picked up as they happen
     if (shown && frame % 8 === 0) refreshText(false);
     shown = draw();
-    if (ptr.on || moving > 0.05 || presence > 0.01) kick();
+    if (ptr.on || rolling() || moving > 0.05 || presence > 0.01) kick();
     else {
       lastT = 0;
       if (shown) {
@@ -618,6 +664,7 @@ void main() {
   function kick() {
     if (!raf) raf = requestAnimationFrame(tick);
   }
+  window.fxKick = kick;
 
   // --- Input ---------------------------------------------------------------------------
 

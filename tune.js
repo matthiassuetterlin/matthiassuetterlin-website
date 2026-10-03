@@ -14,9 +14,10 @@
   const GRID = window.gridTune;
   const FLUID = window.fluidTune || {};
   const MELT = window.meltTune || {};
+  const TILT = window.tiltTune || {};
   if (!MS || !GRID) return;
   const STORE = "ms-tune-saves-v1";
-  const DEFAULTS = { ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID }, melt: { ...MELT } };
+  const DEFAULTS = { ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID }, melt: { ...MELT }, tilt: { ...TILT } };
 
   // Saves that ship with the site: 01 = the earlier look, 02 = the code defaults
   const BUILTIN = [
@@ -127,6 +128,19 @@
       ],
     },
     {
+      title: "Handy-Bewegung",
+      target: TILT,
+      rows: [
+        ["on", "Bewegungssensor an", "toggle"],
+        ["ms", "MS folgt der Neigung", 0, 2, 0.05],
+        ["roll", "Tropfen rollt von selbst (Fluid)", "toggle"],
+        ["gravity", "Schwerkraft", 0, 2, 0.05],
+        ["friction", "Rollen (1 = endlos)", 0.85, 0.995, 0.005],
+        ["shake", "Schwappen bei schneller Bewegung", 0, 3, 0.05],
+        ["range", "Neigung für volle Wirkung (Grad)", 5, 60, 1],
+      ],
+    },
+    {
       title: "Punkte",
       target: GRID,
       mode: "dots",
@@ -229,6 +243,7 @@
     Object.assign(GRID, DEFAULTS.grid, save.grid);
     Object.assign(FLUID, DEFAULTS.fluid, save.fluid || {});
     Object.assign(MELT, DEFAULTS.melt, save.melt || {});
+    Object.assign(TILT, DEFAULTS.tilt, save.tilt || {});
     inputs.forEach((f) => f());
     if (window.gridRebuild) window.gridRebuild();
     if (window.fluidRefresh) window.fluidRefresh();
@@ -279,7 +294,7 @@
   addBtn.addEventListener("click", () => {
     const name = `Speicherung ${String(state.next).padStart(2, "0")}`;
     state.next += 1;
-    state.saves.push({ name, ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID }, melt: { ...MELT } });
+    state.saves.push({ name, ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID }, melt: { ...MELT }, tilt: { ...TILT } });
     current = name;
     writeState();
     renderSaves();
@@ -364,6 +379,29 @@
     panel.appendChild(sec);
   }
 
+  // Sensor access (iOS asks once, from a tap)
+  const mo = window.motion;
+  if (mo && mo.state !== "unavailable") {
+    const tiltSec = groupSecs.find(([, g]) => g.target === TILT)[0];
+    const sensor = document.createElement("button");
+    sensor.type = "button";
+    sensor.className = "tune-add";
+    const label = () => {
+      sensor.textContent =
+        mo.state === "on" ? (mo.active ? "Sensor aktiv ✓" : "Sensor an – Handy bewegen") : mo.state === "denied" ? "Sensor nicht erlaubt (Safari-Einstellungen)" : "Bewegungssensor erlauben";
+    };
+    sensor.addEventListener("click", () => {
+      if (window.motionEnable) window.motionEnable().then(label);
+    });
+    label();
+    setInterval(() => !panel.hidden && label(), 1000);
+    tiltSec.insertBefore(sensor, tiltSec.children[1]);
+  } else {
+    const tiltSec = groupSecs.find(([, g]) => g.target === TILT)[0];
+    tiltSec.hidden = true;
+    groupSecs.splice(groupSecs.findIndex(([, g]) => g.target === TILT), 1);
+  }
+
   const actions = document.createElement("div");
   actions.className = "tune-actions";
   const reset = document.createElement("button");
@@ -374,7 +412,7 @@
   copy.type = "button";
   copy.textContent = "Werte kopieren";
   copy.addEventListener("click", async () => {
-    const text = JSON.stringify({ ms: MS, grid: GRID, fluid: FLUID, melt: MELT }, null, 2);
+    const text = JSON.stringify({ ms: MS, grid: GRID, fluid: FLUID, melt: MELT, tilt: TILT }, null, 2);
     try {
       await navigator.clipboard.writeText(text);
       copy.textContent = "Kopiert ✓";
