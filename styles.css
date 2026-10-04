@@ -1,6 +1,6 @@
 :root {
   --bg: #fff;
-  --ink: rgba(34, 28, 22, 0.88); /* slightly warm, softened black (the MS stays pure black) */
+  --ink: rgba(44, 40, 36, 0.8); /* light, slightly warm, muted black (the MS stays pure black) */
   --ink-dim: rgba(0, 0, 0, 0.45);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -253,8 +253,10 @@ a {
 .tagline-wrap .text-link {
   border-bottom: 0;
 }
-/* Home line: the ampersand in the same tone as the words */
+/* Home line: the ampersand in the same tone as the words, a plain word
+   space either side */
 .tagline-wrap .tagline .sep { opacity: 1; }
+.tagline-wrap .tagline { column-gap: 0.32em; }
 
 /* Letters split by grid.js so they can ride the grid lines */
 .gw { white-space: nowrap; }
