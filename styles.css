@@ -253,6 +253,11 @@ a {
 .tagline-wrap .text-link {
   border-bottom: 0;
 }
+/* Home line: one even, slightly warm black, a touch softer than pure black */
+.tagline-wrap .tagline {
+  color: rgba(34, 28, 22, 0.88);
+}
+.tagline-wrap .tagline .sep { opacity: 1; }
 
 /* Letters split by grid.js so they can ride the grid lines */
 .gw { white-space: nowrap; }
