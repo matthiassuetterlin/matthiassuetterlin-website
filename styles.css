@@ -201,7 +201,7 @@ a {
   justify-content: center;
   gap: 0.03em;
   font-family: "Playfair Display", "Times New Roman", Times, serif;
-  font-size: clamp(7rem, 40vw, 22rem);
+  font-size: var(--mega);
   line-height: 0.82;
   letter-spacing: -0.04em;
   font-weight: 700;
@@ -239,13 +239,24 @@ a {
 .text-link:hover { opacity: 0.55; }
 
 /* Tagline without word underlines — the grid carries it */
+/* Home lockup: one module drives it, the air between M and S
+   (u ≈ 0.18 of the MS size at rest). The line under it stands one u below
+   the MS (ink to cap top), its cap height is u / 4, and it scales with the
+   MS as one unit — with a floor for legibility on small screens. */
+.home-inner {
+  --mega: clamp(7rem, 40vw, 22rem);
+  --u: calc(var(--mega) * 0.18);
+  --tag: max(13px, calc(var(--u) / 4 / 0.716));
+}
 .tagline-wrap {
   position: relative;
   z-index: 4;
   width: max-content;
   max-width: 100%;
-  margin: 1.5rem auto 0;
+  /* u minus what the MS box and the line box already add below / above the ink */
+  margin: calc(var(--mega) * 0.0673 - var(--tag) * 0.165) auto 0;
 }
+.tagline-wrap .tagline { font-size: var(--tag); }
 .tagline-wrap .tagline {
   margin: 0;
   justify-content: center;
@@ -255,7 +266,12 @@ a {
 }
 /* Home line: the ampersand in the same tone as the words, a plain word
    space either side */
-.tagline-wrap .tagline .sep { opacity: 1; }
+.tagline-wrap .tagline .sep {
+  opacity: 1;
+  /* the & has more side bearing on its right: nudge it so both word
+     spaces read the same */
+  margin: 0 -0.05em 0 0.05em;
+}
 .tagline-wrap .tagline { column-gap: 0.32em; }
 
 /* Letters split by grid.js so they can ride the grid lines */
@@ -353,7 +369,7 @@ a {
 .project-card:hover .project-meta { opacity: 1; }
 
 @media (max-width: 640px) {
-  .mega { font-size: clamp(5.5rem, 42vw, 9rem); }
+  .home-inner { --mega: clamp(5.5rem, 42vw, 9rem); }
 }
 
 /* Settings menu (tune.js) */
