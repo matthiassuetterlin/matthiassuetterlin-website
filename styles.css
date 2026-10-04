@@ -37,48 +37,6 @@ a {
   text-underline-offset: 0.15em;
 }
 
-/* First-load guidance — light ink on dark */
-#guide {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  background: rgba(30, 32, 34, 0.92);
-  padding: 1.5rem;
-  transition: opacity 0.6s var(--ease), visibility 0.6s;
-}
-#guide.is-gone {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-.guide-card {
-  max-width: 28rem;
-  border: 1px solid rgba(230, 232, 234, 0.35);
-  padding: 1.5rem 1.6rem 1.35rem;
-  background: #25282b;
-  color: var(--ink);
-}
-.guide-kicker {
-  margin: 0 0 0.6rem;
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
-}
-.guide-body {
-  margin: 0 0 1.25rem;
-  font-size: 17px;
-  line-height: 1.55;
-}
-#guide-ok {
-  border-bottom: 1.2px solid var(--ink);
-  padding-bottom: 2px;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-}
-
 #hud {
   position: fixed;
   z-index: 50;
