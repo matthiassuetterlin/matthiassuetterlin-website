@@ -15,9 +15,12 @@
   const FLUID = window.fluidTune || {};
   const MELT = window.meltTune || {};
   const TILT = window.tiltTune || {};
+  // Text face; candidates load from Google Fonts only when picked
+  const TYPE = (window.typeTune = Object.assign({ font: "Familjen Grotesk" }, window.typeTune || {}));
+  const FONTS = ["Familjen Grotesk", "Instrument Sans", "Funnel Sans", "Host Grotesk", "Schibsted Grotesk", "Geist", "Helvetica"];
   if (!MS || !GRID) return;
   const STORE = "ms-tune-saves-v1";
-  const DEFAULTS = { ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID }, melt: { ...MELT }, tilt: { ...TILT } };
+  const DEFAULTS = { ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID }, melt: { ...MELT }, tilt: { ...TILT }, type: { ...TYPE } };
 
   // Saves that ship with the site: 01 = the earlier look, 02 = the code defaults
   const BUILTIN = [
@@ -244,6 +247,8 @@
     Object.assign(FLUID, DEFAULTS.fluid, save.fluid || {});
     Object.assign(MELT, DEFAULTS.melt, save.melt || {});
     Object.assign(TILT, DEFAULTS.tilt, save.tilt || {});
+    Object.assign(TYPE, DEFAULTS.type, save.type || {});
+    setFont(TYPE.font);
     inputs.forEach((f) => f());
     if (window.gridRebuild) window.gridRebuild();
     if (window.fluidRefresh) window.fluidRefresh();
@@ -294,7 +299,7 @@
   addBtn.addEventListener("click", () => {
     const name = `Speicherung ${String(state.next).padStart(2, "0")}`;
     state.next += 1;
-    state.saves.push({ name, ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID }, melt: { ...MELT }, tilt: { ...TILT } });
+    state.saves.push({ name, ms: { ...MS }, grid: { ...GRID }, fluid: { ...FLUID }, melt: { ...MELT }, tilt: { ...TILT }, type: { ...TYPE } });
     current = name;
     writeState();
     renderSaves();
@@ -325,6 +330,46 @@
   });
   modeSec.append(modeH, modeRow);
   panel.insertBefore(modeSec, savesSec);
+
+  // --- Text face ---------------------------------------------------------------
+  const fontSec = document.createElement("section");
+  const fontH = document.createElement("h3");
+  fontH.textContent = "Schrift";
+  const fontSel = document.createElement("select");
+  fontSel.className = "tune-select";
+  for (const f of FONTS) {
+    const o = document.createElement("option");
+    o.value = f;
+    o.textContent = f === "Helvetica" ? "Helvetica (alt)" : f;
+    fontSel.appendChild(o);
+  }
+  fontSel.addEventListener("change", () => {
+    TYPE.font = fontSel.value;
+    setFont(TYPE.font);
+    current = null;
+    renderSaves();
+  });
+  fontSec.append(fontH, fontSel);
+  panel.insertBefore(fontSec, savesSec);
+  function setFont(f) {
+    fontSel.value = f;
+    const root = document.documentElement;
+    if (f !== "Helvetica" && !document.getElementById(`font-${f}`)) {
+      const link = document.createElement("link");
+      link.id = `font-${f}`;
+      link.rel = "stylesheet";
+      link.href = `https://fonts.googleapis.com/css2?family=${f.replace(/ /g, "+")}:wght@400;500;600&display=swap`;
+      document.head.appendChild(link);
+    }
+    root.style.setProperty("--sans", f === "Helvetica" ? 'Helvetica, "Helvetica Neue", Arial, sans-serif' : `"${f}", Helvetica, Arial, sans-serif`);
+    // Re-hang the text on the grid and redraw the lens texture once loaded
+    const done = () => {
+      if (window.gridRebuild) window.gridRebuild();
+      if (window.fluidRefresh) window.fluidRefresh();
+    };
+    if (document.fonts && f !== "Helvetica") document.fonts.load(`16px "${f}"`).then(done, done);
+    else done();
+  }
   function syncMode() {
     const m = window.fxMode || "dots";
     for (const b of modeBtns) b.setAttribute("aria-pressed", String(b.dataset.mode === m));
@@ -412,7 +457,7 @@
   copy.type = "button";
   copy.textContent = "Werte kopieren";
   copy.addEventListener("click", async () => {
-    const text = JSON.stringify({ ms: MS, grid: GRID, fluid: FLUID, melt: MELT, tilt: TILT }, null, 2);
+    const text = JSON.stringify({ ms: MS, grid: GRID, fluid: FLUID, melt: MELT, tilt: TILT, type: TYPE }, null, 2);
     try {
       await navigator.clipboard.writeText(text);
       copy.textContent = "Kopiert ✓";

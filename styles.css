@@ -3,6 +3,8 @@
   --ink: #000;
   --ink-dim: rgba(0, 0, 0, 0.45);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Text face: a fresh grotesque (switchable in the settings menu) */
+  --sans: "Familjen Grotesk", Helvetica, "Helvetica Neue", Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -12,7 +14,7 @@ html, body {
   min-height: 100%;
   background: var(--bg);
   color: var(--ink);
-  font-family: Helvetica, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--sans);
 }
 body { overflow-x: clip; } /* the grid never causes sideways scroll */
 
@@ -233,14 +235,14 @@ a {
 .tagline .sep { opacity: 0.4; }
 
 /* Home: one quiet line under the MS, sized from the logo: its cap
-   height is 10 % of the MS cap height (Playfair caps 0.708 em,
-   Helvetica 0.716 em), set plainly with a regular ampersand. */
+   height is about 10 % of the MS cap height, set plainly with a regular
+   ampersand. */
 .home-inner {
   --mega: clamp(7rem, 40vw, 22rem);
   --tag-ratio: 0.1;
 }
 .tagline-wrap .tagline {
-  font-size: max(14px, calc(var(--mega) * var(--tag-ratio) * 0.989));
+  font-size: max(14px, calc(var(--mega) * var(--tag-ratio)));
   letter-spacing: 0.01em;
   gap: 0 0.28em;
   flex-wrap: nowrap;
@@ -510,3 +512,12 @@ a {
 }
 .tune-mode button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .tune-mode button:disabled { opacity: 0.35; cursor: default; }
+.tune-select {
+  width: 100%;
+  padding: 7px 8px;
+  font: inherit;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+}

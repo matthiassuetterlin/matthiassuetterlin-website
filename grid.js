@@ -67,7 +67,7 @@
   // Main text stands above a line, sub text hangs below it
   const MAIN = ".panel h2, .project-name, .tagline";
   const SUB = ".panel p, .facts li, .local-nav, .project-meta, .home-hint";
-  const CAP = 0.716; // cap height of Helvetica/Arial per em
+  let CAP = 0.716; // cap height of the text face per em (measured in build)
   const SPLIT = ".panel, .tagline, .home-hint";
 
   let cols = 0;
@@ -267,7 +267,17 @@
 
   // --- Grid --------------------------------------------------------------
 
+  // Cap height of the body text face, so text can stand on the grid lines
+  // whatever font is set
+  const capCtx = document.createElement("canvas").getContext("2d");
+  function measureCap() {
+    capCtx.font = `100px ${getComputedStyle(document.body).fontFamily}`;
+    const h = capCtx.measureText("H").actualBoundingBoxAscent;
+    if (h > 30 && h < 100) CAP = h / 100;
+  }
+
   function build() {
+    measureCap();
     const fontPx = letterM ? parseFloat(getComputedStyle(letterM).fontSize) : 0;
     // M stem ≈ 0.165 em; the grid runs a little wider
     spacing = Math.max(36, Math.round((fontPx || 350) * T.spacing));
