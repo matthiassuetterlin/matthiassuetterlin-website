@@ -1,6 +1,4 @@
 (() => {
-  const guide = document.getElementById("guide");
-  const guideOk = document.getElementById("guide-ok");
   const btnOut = document.getElementById("btn-out");
   const crumb = document.getElementById("crumb");
   const views = [...document.querySelectorAll(".view")];
@@ -52,34 +50,8 @@
   btnOut.addEventListener("click", goOut);
 
   window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      if (!guide.classList.contains("is-gone")) {
-        dismissGuide();
-        return;
-      }
-      goOut();
-    }
+    if (e.key === "Escape") goOut();
   });
-
-  function dismissGuide() {
-    guide.classList.add("is-gone");
-    try {
-      sessionStorage.setItem("ms-guide-seen", "1");
-    } catch (_) {}
-  }
-
-  guideOk.addEventListener("click", dismissGuide);
-
-  // Auto-fade after a few seconds if ignored
-  window.setTimeout(() => {
-    if (!guide.classList.contains("is-gone")) dismissGuide();
-  }, 10000);
-
-  try {
-    if (sessionStorage.getItem("ms-guide-seen") === "1") {
-      guide.classList.add("is-gone");
-    }
-  } catch (_) {}
 
   show("home");
 })();
