@@ -1,6 +1,6 @@
 :root {
   --bg: #fff;
-  --ink: #000;
+  --ink: rgba(34, 28, 22, 0.88); /* slightly warm, softened black (the MS stays pure black) */
   --ink-dim: rgba(0, 0, 0, 0.45);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -253,10 +253,7 @@ a {
 .tagline-wrap .text-link {
   border-bottom: 0;
 }
-/* Home line: one even, slightly warm black, a touch softer than pure black */
-.tagline-wrap .tagline {
-  color: rgba(34, 28, 22, 0.88);
-}
+/* Home line: the ampersand in the same tone as the words */
 .tagline-wrap .tagline .sep { opacity: 1; }
 
 /* Letters split by grid.js so they can ride the grid lines */
