@@ -232,35 +232,18 @@ a {
 }
 .tagline .sep { opacity: 0.4; }
 
-/* Home: one line under the MS, set as a lockup — sized from the logo so
-   the line runs exactly as wide as the MS. --tag-ratio is its cap height
-   as a share of the MS cap height (Playfair caps 0.708 em, Helvetica
-   0.716 em). The ampersand is the friction point: Playfair italic,
-   larger, dropped below the line and tucked under the D. */
+/* Home: one quiet line under the MS, sized from the logo: its cap
+   height is 10 % of the MS cap height (Playfair caps 0.708 em,
+   Helvetica 0.716 em), set plainly with a regular ampersand. */
 .home-inner {
   --mega: clamp(7rem, 40vw, 22rem);
-  --tag-ratio: 0.125;
-}
-@media (max-width: 600px) {
-  .home-inner { --tag-ratio: 0.115; }
+  --tag-ratio: 0.1;
 }
 .tagline-wrap .tagline {
-  font-size: max(15px, calc(var(--mega) * var(--tag-ratio) * 0.989));
-  letter-spacing: 0.005em;
-  gap: 0 0.22em;
+  font-size: max(14px, calc(var(--mega) * var(--tag-ratio) * 0.989));
+  letter-spacing: 0.01em;
+  gap: 0 0.28em;
   flex-wrap: nowrap;
-}
-.tagline .amp {
-  position: relative;
-  top: 0.3em;
-  margin: 0 -0.2em 0 -0.03em;
-  font-family: "Playfair Display", "Times New Roman", Times, serif;
-  font-style: italic;
-  font-weight: 400;
-  font-size: 1.75em;
-  line-height: 0;
-  transform: rotate(-3deg);
-  display: inline-block;
 }
 
 .text-link {
@@ -380,7 +363,7 @@ a {
 .project-card:hover .project-meta { opacity: 1; }
 
 @media (max-width: 640px) {
-  .mega { font-size: clamp(5.5rem, 42vw, 9rem); }
+  .home-inner { --mega: clamp(5.5rem, 42vw, 9rem); }
 }
 
 /* Settings menu (tune.js) */
